@@ -442,7 +442,7 @@
                 // Append inline comments on this block
                 if (b._comments && b._comments.length > 0) {
                     for (const comment of b._comments) {
-                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
+                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('').replace(/\n/g, ' ').trim();
                         if (commentText) text += `[FX COMMENT] ${commentText}\n`;
                     }
                 }
@@ -684,12 +684,14 @@
                 }
 
                 const scriptText = blocksToRichText(pageData.results);
+                window._debugScriptText = scriptText; // debug
                 if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
                 // Extract all [FX COMMENT] lines from scriptText for display
                 const fxCommentLines = scriptText.split('\n')
                     .filter(l => l.startsWith('[FX COMMENT]'))
                     .map(l => l.replace('[FX COMMENT]', '').trim());
+                window._debugFxCommentLines = fxCommentLines; // debug
 
                 // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
