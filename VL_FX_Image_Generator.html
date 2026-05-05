@@ -752,12 +752,11 @@
             controlActive.classList.remove('hidden');
 
             try {
-                const refImages = [...slots[0], ...slots[1]];
                 for (let i = 0; i < prompts.length; i++) {
                     if (signal.aborted) break;
                     progressText.textContent = `Generating ${i+1}/${prompts.length}...`;
                     modelLabel.textContent = 'Model: Nano Banana 2';
-                    const b64 = await callGeminiAPI(prompts[i], refImages, signal);
+                    const b64 = await callGeminiAPI(prompts[i], [], signal, slots[0], slots[1]);
                     if (b64) addResult(b64, slots[0][0]?.base64 || null);
                     else throw new Error('No image data in response.');
                 }
@@ -799,13 +798,40 @@
             }
         }
 
-        async function callGeminiAPI(prompt, images=[], signal) {
-            const parts = [{ text: prompt }];
-            images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+        async function callGeminiAPI(prompt, images=[], signal, slot1Images=[], slot2Images=[]) {
+            const parts = [];
+
+            // Add slot1 images with label (character style ref)
+            if (slot1Images.length > 0) {
+                parts.push({ text: '[Character Style Reference — use rendering style, proportions, and lighting only. Do not copy any specific character\'s face, hair, skin tone, outfit, or pose. These are style guides only.]' });
+                slot1Images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+            }
+
+            // Add slot2 images with label (object/background style ref)
+            if (slot2Images.length > 0) {
+                parts.push({ text: '[Object & Background Style Reference — use for object rendering style, color palette, and background aesthetic only.]' });
+                slot2Images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+            }
+
+            // Fallback: if called with combined images (batch mode), add without label
+            if (slot1Images.length === 0 && slot2Images.length === 0) {
+                images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+            }
+
+            parts.push({ text: prompt });
+
+            const systemInstruction = {
+                parts: [{ text: 'You are an image generation assistant. When reference images are provided, use them strictly as style guides — for rendering quality, lighting style, color palette, and illustration aesthetic only. Never copy a specific character\'s face, hair, skin tone, expression, outfit, or pose from the references. Always generate a brand new character or subject as described in the prompt.' }]
+            };
+
             const res = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }) },
+                  body: JSON.stringify({
+                      systemInstruction,
+                      contents: [{ parts }],
+                      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+                  }) },
                 signal
             );
             return res.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
@@ -826,7 +852,7 @@
         // ── SLOTS ──
         function initSlots() {
             uploadArea.innerHTML = '';
-            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
+            const labels = ['Slot 1 — Character Style', 'Slot 2 — Object / BG Style', 'Slot 3 — Batch Target'];
             for (let i = 0; i < 3; i++) {
                 const isSlot3 = i === 2;
                 const slotEl = document.createElement('div');
@@ -838,13 +864,23 @@
                 slotContent.className = 'slot-content w-full h-full flex flex-wrap gap-1 items-start justify-center overflow-y-auto';
 
                 const emptyEl = document.createElement('div');
-                emptyEl.className = 'slot-empty flex flex-col items-center justify-center gap-2 opacity-50 h-full';
+                emptyEl.className = 'slot-empty flex flex-col items-center justify-center gap-1.5 opacity-50 h-full px-3 text-center';
                 const slotLabel = document.createElement('span');
                 slotLabel.className = `text-xs font-bold uppercase tracking-widest ${isSlot3 ? 'text-indigo-400' : 'text-gray-500'}`;
                 slotLabel.textContent = labels[i];
+                const slotDesc = document.createElement('span');
+                slotDesc.className = 'text-[10px] text-gray-600 leading-tight';
+                const descs = [
+                    'Character & person style refs\n(style only — won\'t copy face/outfit)',
+                    'Object, icon & background style refs',
+                    'Images to batch-transform\nusing Slot 1+2 as style ref'
+                ];
+                slotDesc.style.whiteSpace = 'pre-line';
+                slotDesc.textContent = descs[i];
                 const plusIcon = document.createElement('span');
+                plusIcon.className = 'mt-1';
                 plusIcon.innerHTML = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>`;
-                emptyEl.append(slotLabel, plusIcon);
+                emptyEl.append(slotLabel, slotDesc, plusIcon);
                 slotContent.appendChild(emptyEl);
 
                 const countLabel = document.createElement('span');
@@ -899,7 +935,7 @@
             const countLabel = slotEl.querySelector(`#slot-count-${idx}`);
             const clearBtn = slotEl.querySelector(`#slot-clear-${idx}`);
             const isSlot3 = idx === 2;
-            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
+            const labels = ['Slot 1 — Character Style', 'Slot 2 — Object / BG Style', 'Slot 3 — Batch Target'];
             content.innerHTML = '';
             if (slots[idx].length === 0) {
                 const emptyEl = document.createElement('div');
@@ -1069,17 +1105,15 @@
             controlDefault.classList.add('hidden'); controlActive.classList.remove('hidden');
             try {
                 if (mode === 'single') {
-                    const refImages = [...slots[0], ...slots[1]];
                     modelLabel.textContent = 'Model: Nano Banana 2';
                     for (let i = 0; i < counts.single; i++) {
                         if (signal.aborted) break;
                         progressText.textContent = `Generating Image ${i+1}/${counts.single}...`;
-                        const b64 = await callGeminiAPI(prompt, refImages, signal);
+                        const b64 = await callGeminiAPI(prompt, [], signal, slots[0], slots[1]);
                         if (b64) addResult(b64, slots[0][0]?.base64 || null);
                         else throw new Error("No image data in response.");
                     }
                 } else {
-                    const styleRefs = [...slots[0], ...slots[1]];
                     const targets = [...slots[2]];
                     if (!targets.length) throw new Error("Slot 3 is empty.");
                     modelLabel.textContent = 'Model: Nano Banana 2';
@@ -1089,7 +1123,7 @@
                         for (let i = 0; i < counts.bulk; i++) {
                             if (signal.aborted) break;
                             progressText.textContent = `Batch Processing ${++count}/${total}...`;
-                            const b64 = await callGeminiAPI(prompt, [...styleRefs, target], signal);
+                            const b64 = await callGeminiAPI(prompt, [target], signal, slots[0], slots[1]);
                             if (b64) addResult(b64, target.base64);
                         }
                         if (signal.aborted) break;
