@@ -686,13 +686,21 @@
                 const scriptText = blocksToRichText(pageData.results);
                 if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
+                // Extract all [FX COMMENT] lines from scriptText for display
+                const fxCommentLines = scriptText.split('\n')
+                    .filter(l => l.startsWith('[FX COMMENT]'))
+                    .map(l => l.replace('[FX COMMENT]', '').trim());
+
                 // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
-                const scriptWithInstructions = scriptText + `\n\n---\nIMPORTANT: For each asset, include a "source:" line right after the context line (>) that shows the exact original FX comment text from the script (the [FX COMMENT] line that triggered this asset). Format:\n> [context line]\n> source: [exact FX COMMENT text here]\n`;
-                const response = await callClaude(systemPromptCache, scriptWithInstructions, signal);
+                const response = await callClaude(systemPromptCache, scriptText, signal);
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
+                // Attach FX comment source to each card by order
+                generatedPrompts.forEach((p, i) => {
+                    if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i];
+                });
                 hidePGLoading();
                 renderPGCards();
                 if (generatedPrompts.length === 0) {
