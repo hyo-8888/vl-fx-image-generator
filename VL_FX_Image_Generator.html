@@ -699,9 +699,11 @@
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
-                // Attach FX comment source to each card by order
+                // Attach FX comment source + append ref-isolation clause to each image prompt
+                const refIsolation = 'Use the reference images for rendering style, lighting, and color palette only — do not copy any specific character\'s face, hair, outfit, or pose from the references. Generate a completely new character based on the description above.';
                 generatedPrompts.forEach((p, i) => {
                     if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i];
+                    if (p.type === 'image') p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
                 });
                 hidePGLoading();
                 renderPGCards();
