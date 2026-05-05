@@ -340,11 +340,10 @@
             return m ? m[1].replace(/-/g, '') : null;
         }
 
-        async function notionFetchBlocks(pageId, signal) {
+        async function notionFetchBlocksRaw(pageId, signal) {
             if (!notionKey) throw new Error('Notion Integration Token required. Enter it via API Keys.');
             let allBlocks = [];
             let cursor = undefined;
-            // pagination — fetch all blocks (100 per page)
             while (true) {
                 const body = { pageId, token: notionKey };
                 if (cursor) body.cursor = cursor;
@@ -364,7 +363,20 @@
                 if (!data.has_more) break;
                 cursor = data.next_cursor;
             }
-            return { results: allBlocks };
+            return allBlocks;
+        }
+
+        // Fetch blocks + recursively fetch children of toggle/column blocks
+        async function notionFetchBlocks(pageId, signal) {
+            const blocks = await notionFetchBlocksRaw(pageId, signal);
+            // Fetch children for blocks that have them (toggle, columns, etc.)
+            for (const block of blocks) {
+                if (block.has_children) {
+                    const children = await notionFetchBlocksRaw(block.id, signal);
+                    block._children = children;
+                }
+            }
+            return { results: blocks };
         }
 
         function blocksToText(blocks) {
@@ -372,6 +384,39 @@
             for (const b of blocks) {
                 const c = b[b.type];
                 if (c?.rich_text) text += c.rich_text.map(t => t.plain_text).join('') + '\n';
+            }
+            return text.trim();
+        }
+
+        // Rich version — preserves headings, code blocks, tables, bullets, toggle children
+        function blocksToRichText(blocks) {
+            let text = '';
+            for (const b of blocks) {
+                const type = b.type;
+                const c = b[type];
+                const rt = (arr) => (arr || []).map(t => t.plain_text).join('');
+
+                if (type === 'heading_1') text += `# ${rt(c.rich_text)}\n\n`;
+                else if (type === 'heading_2') text += `## ${rt(c.rich_text)}\n\n`;
+                else if (type === 'heading_3') text += `### ${rt(c.rich_text)}\n\n`;
+                else if (type === 'paragraph') { const t = rt(c.rich_text); text += t ? t + '\n\n' : '\n'; }
+                else if (type === 'bulleted_list_item') text += `- ${rt(c.rich_text)}\n`;
+                else if (type === 'numbered_list_item') text += `• ${rt(c.rich_text)}\n`;
+                else if (type === 'code') text += '```\n' + rt(c.rich_text) + '\n```\n\n';
+                else if (type === 'quote') text += `> ${rt(c.rich_text)}\n\n`;
+                else if (type === 'divider') text += '---\n\n';
+                else if (type === 'toggle') {
+                    text += `${rt(c.rich_text)}\n`;
+                    if (b._children) text += blocksToRichText(b._children) + '\n';
+                }
+                else if (type === 'table_row') {
+                    const cells = (c.cells || []).map(cell => cell.map(t => t.plain_text).join('')).join(' | ');
+                    text += `| ${cells} |\n`;
+                }
+                else if (c?.rich_text) text += rt(c.rich_text) + '\n';
+
+                // Recurse into any other children
+                if (b._children && type !== 'toggle') text += blocksToRichText(b._children);
             }
             return text.trim();
         }
@@ -551,11 +596,11 @@
             const signal = pgAbortController.signal;
 
             try {
-                // 1. Load style guide
+                // 1. Load style guide from Notion (cached after first load)
                 if (!systemPromptCache) {
                     setPGLoading('Loading style guide...');
                     const sgData = await notionFetchBlocks(STYLE_GUIDE_PAGE_ID, signal);
-                    systemPromptCache = blocksToText(sgData.results);
+                    systemPromptCache = blocksToRichText(sgData.results);
                 }
 
                 // 2. Load script page
@@ -563,7 +608,7 @@
                 const pageId = extractPageId(url);
                 if (!pageId) throw new Error('Please enter a valid Notion link.');
                 const pageData = await notionFetchBlocks(pageId, signal);
-                const scriptText = blocksToText(pageData.results);
+                const scriptText = blocksToRichText(pageData.results);
                 if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
                 // 3. Call Claude
