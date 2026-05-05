@@ -9,6 +9,7 @@
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; }
         .loader { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #f59e0b; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; }
+        .loader-sm { border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid #a78bfa; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
         .upload-box { transition: all 0.2s ease; outline: none; }
         .upload-box.dragover { background-color: rgba(245,158,11,0.1); border-color: #f59e0b; transform: scale(1.02); }
@@ -20,6 +21,8 @@
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
         .image-card-hover:hover .image-overlay { opacity: 1; }
+        .prompt-card { transition: all 0.2s ease; }
+        .prompt-card.selected { border-color: #7c3aed !important; background-color: rgba(124,58,237,0.05); }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
@@ -27,23 +30,37 @@
     <!-- API Key Modal -->
     <div id="api-modal" class="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-gray-700 rounded-3xl p-8 max-w-md w-full shadow-2xl">
-            <div class="flex items-center gap-3 mb-6">
+            <div class="flex items-center gap-3 mb-2">
                 <div class="bg-amber-500 p-2 rounded-xl">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                     </svg>
                 </div>
                 <div>
-                    <h2 class="text-lg font-bold text-white">API 키 입력</h2>
-                    <p class="text-xs text-gray-400">Google AI Studio API Key</p>
+                    <h2 class="text-lg font-bold text-white">API 키 설정</h2>
+                    <p class="text-xs text-gray-400">최초 1회 입력 후 브라우저에 저장돼요</p>
                 </div>
             </div>
-            <p class="text-sm text-gray-400 mb-4">
-                <a href="https://aistudio.google.com/apikey" target="_blank" class="text-amber-400 underline">aistudio.google.com</a>에서 발급받은 API 키를 입력하세요. 키는 이 브라우저에만 저장돼요.
-            </p>
-            <input type="password" id="api-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none mb-4" placeholder="AIza...">
-            <div id="api-key-error" class="hidden text-xs text-red-400 mb-3 px-1">API 키 형식이 올바르지 않아요. AIza로 시작하는 키를 입력해주세요.</div>
-            <div class="flex items-center gap-2 mb-6">
+            <p class="text-xs text-gray-500 mb-5 pl-1">Gemini 키만 있어도 이미지 생성 가능. Claude 키는 자동 프롬프트 생성에 필요해요.</p>
+            <div class="space-y-4 mb-5">
+                <div>
+                    <label class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1.5 block">Gemini API Key <span class="text-red-400">*필수</span></label>
+                    <input type="password" id="gemini-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="AIza...">
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1"><a href="https://aistudio.google.com/apikey" target="_blank" class="text-amber-500 underline">aistudio.google.com</a>에서 발급</p>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-purple-400 uppercase tracking-widest mb-1.5 block">Claude API Key <span class="text-gray-500">(프롬프트 자동생성용)</span></label>
+                    <input type="password" id="claude-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="sk-ant-...">
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1"><a href="https://console.anthropic.com" target="_blank" class="text-purple-400 underline">console.anthropic.com</a>에서 발급</p>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-green-400 uppercase tracking-widest mb-1.5 block">Notion Integration Token <span class="text-gray-500">(노션 링크 자동 파싱용)</span></label>
+                    <input type="password" id="notion-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" placeholder="ntn_...">
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1">Speak 워크스페이스 관리자에게 요청</p>
+                </div>
+            </div>
+            <div id="api-key-error" class="hidden text-xs text-red-400 mb-3 px-1">Gemini API 키를 확인해주세요. (AIza로 시작)</div>
+            <div class="flex items-center gap-2 mb-5">
                 <input type="checkbox" id="save-key-cb" checked class="rounded bg-gray-800 border-gray-700 text-amber-500">
                 <label for="save-key-cb" class="text-xs text-gray-400">이 브라우저에 저장 (다음에 자동 입력)</label>
             </div>
@@ -52,7 +69,7 @@
     </div>
 
     <div class="max-w-7xl mx-auto px-4 py-6 lg:py-10">
-        <header class="mb-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <header class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div class="flex items-center gap-3">
                 <div class="bg-amber-500 p-2 rounded-xl shadow-lg shadow-amber-900/20">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -61,7 +78,7 @@
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold tracking-tight text-white">VL FX Image Generator</h1>
-                    <p class="text-sm text-gray-400">Powered by Hyojeong Bot — Gemini Canvas</p>
+                    <p class="text-sm text-gray-400">Powered by Hyojeong Bot — Claude + Gemini</p>
                 </div>
             </div>
             <div class="flex items-center gap-4 bg-gray-900 p-3 rounded-2xl border border-gray-800">
@@ -74,6 +91,50 @@
                 <button id="change-key-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-amber-400 px-3 py-1.5 rounded-lg transition">API 키 변경</button>
             </div>
         </header>
+
+        <!-- ── PROMPT GENERATOR ── -->
+        <section class="bg-gray-900 rounded-3xl p-6 border border-purple-900/40 shadow-xl mb-8">
+            <div class="flex items-center gap-2 mb-5">
+                <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                <h2 class="text-lg font-bold">Prompt Generator</h2>
+                <span class="text-xs text-gray-500 ml-1">노션 스크립트 링크 → Claude가 FX 프롬프트 자동 생성</span>
+            </div>
+            <div class="flex gap-3 mb-4">
+                <input type="text" id="notion-url-input" placeholder="노션 스크립트 페이지 링크를 붙여넣으세요..." class="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition">
+                <button id="generate-prompts-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-3 rounded-xl transition flex items-center gap-2 whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+                    프롬프트 생성
+                </button>
+            </div>
+            <!-- Loading -->
+            <div id="pg-loading" class="hidden items-center gap-3 text-sm text-purple-300 mb-4">
+                <div class="loader-sm"></div>
+                <span id="pg-loading-text">노션 페이지 읽는 중...</span>
+                <button id="pg-cancel-btn" class="ml-2 text-xs text-red-400 hover:text-red-300 underline underline-offset-4">취소</button>
+            </div>
+            <!-- Error -->
+            <div id="pg-error" class="hidden text-xs text-red-400 bg-red-900/20 border border-red-900/30 rounded-xl px-4 py-3 mb-4"></div>
+            <!-- Prompt list -->
+            <div id="pg-results" class="hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <p id="pg-results-info" class="text-xs text-gray-500"></p>
+                    <div class="flex gap-2">
+                        <button id="pg-select-all-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">전체 선택</button>
+                        <button id="pg-generate-selected-btn" class="text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-4 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/></svg>
+                            선택 항목 이미지 생성
+                        </button>
+                    </div>
+                </div>
+                <div id="pg-cards" class="flex flex-col gap-3 max-h-[480px] overflow-y-auto pr-1"></div>
+            </div>
+            <!-- Empty -->
+            <div id="pg-empty" class="flex flex-col items-center justify-center py-10 text-gray-600 opacity-40">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <p class="text-sm">노션 링크를 입력하고 프롬프트를 생성하세요</p>
+                <p class="text-xs mt-1">Claude API 키가 필요해요</p>
+            </div>
+        </section>
 
         <main class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-7 flex flex-col gap-8">
@@ -208,43 +269,418 @@
     </div>
 
     <script>
-        const MODELS = { generation: "gemini-3.1-flash-image-preview", vision: "gemini-3.1-flash-image-preview" };
-        let apiKey = "";
+        // ── CONFIG ──
+        const GEMINI_MODEL = "gemini-3.1-flash-image-preview";
+        const CLAUDE_MODEL = "claude-sonnet-4-5";
+        const NOTION_PROXY_URL = "https://notion-proxy.hyo-047.workers.dev";
+        const STYLE_GUIDE_PAGE_ID = "352792ec2f10816b9ba9efa7954479d5";
+
+        // ── STATE ──
+        let geminiKey = "";
+        let claudeKey = "";
+        let notionKey = "";
         let slots = [[], [], []];
         let sessionCount = 0;
         let isGenerating = false;
         let currentAbortController = null;
         let counts = { single: 1, bulk: 1 };
-        let results = []; // { base64, refBase64 } — stores ref as base64 to survive slot clearing
+        let results = [];
         let toastTimer = null;
+        let generatedPrompts = [];
+        let systemPromptCache = null;
 
-        // 저장된 키 불러오기
-        const savedKey = localStorage.getItem('gemini_api_key');
-        if (savedKey) { apiKey = savedKey; document.getElementById('api-modal').classList.add('hidden'); }
+        // ── LOAD SAVED KEYS ──
+        geminiKey = localStorage.getItem('gemini_api_key') || "";
+        claudeKey = localStorage.getItem('claude_api_key') || "";
+        notionKey = localStorage.getItem('notion_api_key') || "";
+        if (geminiKey) document.getElementById('api-modal').classList.add('hidden');
 
+        // ── API MODAL ──
         document.getElementById('api-confirm-btn').onclick = () => {
-            const key = document.getElementById('api-key-input').value.trim();
+            const gKey = document.getElementById('gemini-key-input').value.trim();
+            const cKey = document.getElementById('claude-key-input').value.trim();
+            const nKey = document.getElementById('notion-key-input').value.trim();
             const errEl = document.getElementById('api-key-error');
-            if (!key) { errEl.classList.remove('hidden'); return; }
-            if (!key.startsWith('AIza') || key.length < 30) { errEl.classList.remove('hidden'); return; }
+            if (!gKey || !gKey.startsWith('AIza') || gKey.length < 30) { errEl.classList.remove('hidden'); return; }
             errEl.classList.add('hidden');
-            apiKey = key;
-            if (document.getElementById('save-key-cb').checked) localStorage.setItem('gemini_api_key', key);
+            geminiKey = gKey;
+            claudeKey = cKey;
+            notionKey = nKey;
+            if (document.getElementById('save-key-cb').checked) {
+                localStorage.setItem('gemini_api_key', gKey);
+                if (cKey) localStorage.setItem('claude_api_key', cKey);
+                if (nKey) localStorage.setItem('notion_api_key', nKey);
+            }
             document.getElementById('api-modal').classList.add('hidden');
         };
 
-        document.getElementById('api-key-input').oninput = () => {
-            document.getElementById('api-key-error').classList.add('hidden');
-        };
-
         document.getElementById('change-key-btn').onclick = () => {
-            document.getElementById('api-key-input').value = '';
+            document.getElementById('gemini-key-input').value = geminiKey;
+            document.getElementById('claude-key-input').value = claudeKey;
+            document.getElementById('notion-key-input').value = notionKey;
             document.getElementById('api-key-error').classList.add('hidden');
             document.getElementById('api-modal').classList.remove('hidden');
         };
 
+        // ── TOAST ──
         const toast = document.getElementById('toast');
         const toastMsg = document.getElementById('toast-msg');
+        function showToast(msg) {
+            if (toastTimer) clearTimeout(toastTimer);
+            toastMsg.textContent = msg;
+            toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-100 translate-y-0';
+            toastTimer = setTimeout(() => {
+                toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-0 translate-y-10 pointer-events-none';
+            }, 3000);
+        }
+
+        // ── NOTION API ──
+        function extractPageId(url) {
+            const m = url.match(/([a-f0-9]{32})/) || url.match(/([a-f0-9-]{36})/);
+            return m ? m[1].replace(/-/g, '') : null;
+        }
+
+        async function notionFetchBlocks(pageId, signal) {
+            if (!notionKey) throw new Error('Notion Integration Token이 필요해요. API 키 변경에서 입력하세요.');
+            let allBlocks = [];
+            let cursor = undefined;
+            // pagination 처리 — 100블록 넘으면 계속 가져오기
+            while (true) {
+                const body = { pageId, token: notionKey };
+                if (cursor) body.cursor = cursor;
+                const res = await fetch(NOTION_PROXY_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal
+                });
+                if (!res.ok) {
+                    let errMsg = `Notion 오류 (${res.status})`;
+                    try { const e = await res.json(); errMsg = e.message || e.error || errMsg; } catch(e) {}
+                    throw new Error(errMsg);
+                }
+                const data = await res.json();
+                allBlocks = allBlocks.concat(data.results || []);
+                if (!data.has_more) break;
+                cursor = data.next_cursor;
+            }
+            return { results: allBlocks };
+        }
+
+        function blocksToText(blocks) {
+            let text = '';
+            for (const b of blocks) {
+                const c = b[b.type];
+                if (c?.rich_text) text += c.rich_text.map(t => t.plain_text).join('') + '\n';
+            }
+            return text.trim();
+        }
+
+        // ── CLAUDE API ──
+        async function callClaude(system, user, signal) {
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'x-api-key': claudeKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }] }),
+                signal
+            });
+            if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Claude 오류 (${res.status})`); }
+            const d = await res.json();
+            return d.content[0].text;
+        }
+
+        // ── PROMPT GENERATOR ──
+        function setPGLoading(msg) {
+            const el = document.getElementById('pg-loading');
+            el.classList.remove('hidden'); el.classList.add('flex');
+            document.getElementById('pg-loading-text').textContent = msg;
+        }
+        function hidePGLoading() {
+            const el = document.getElementById('pg-loading');
+            el.classList.add('hidden'); el.classList.remove('flex');
+        }
+        function showPGError(msg) {
+            const el = document.getElementById('pg-error');
+            el.textContent = msg; el.classList.remove('hidden');
+        }
+        function hidePGError() { document.getElementById('pg-error').classList.add('hidden'); }
+
+        function parseClaudeResponse(text) {
+            const prompts = [];
+            // 1차: 이모지 기반 파싱 (🖼/🎬)
+            const re = /(🖼|🎬)\s+\*\*#(\d+)[^*]*\*\*[^\n]*\n>(.*?)\n+([\s\S]*?)(?=\n---|\n🖼|\n🎬|$)/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                const type = m[1] === '🖼' ? 'image' : 'animation';
+                const context = m[3].trim();
+                const raw = m[4];
+                const code = raw.match(/```[\w]*\n?([\s\S]*?)```/);
+                const prompt = code ? code[1].trim() : raw.trim();
+                if (prompt) prompts.push({ id: m[2], type, context, prompt, selected: type === 'image' });
+            }
+            if (prompts.length > 0) return prompts;
+
+            // 2차: 코드블록 기반 파싱 (이모지 없을 때)
+            const codeBlocks = [...text.matchAll(/```[\w]*\n?([\s\S]*?)```/g)];
+            if (codeBlocks.length > 0) {
+                codeBlocks.forEach((cb, i) => {
+                    const prompt = cb[1].trim();
+                    if (prompt) prompts.push({ id: String(i+1), type: 'image', context: `프롬프트 ${i+1}`, prompt, selected: true });
+                });
+                return prompts;
+            }
+
+            // 3차: 섹션 기반 파싱 (#1, #2 등 번호 패턴)
+            const sections = text.split(/\n(?=#+\s*#?\d+|---)/);
+            if (sections.length > 1) {
+                sections.forEach((s, i) => {
+                    const prompt = s.replace(/^[#\-\s]+/, '').trim();
+                    if (prompt.length > 20) prompts.push({ id: String(i+1), type: 'image', context: `프롬프트 ${i+1}`, prompt, selected: true });
+                });
+                if (prompts.length > 0) return prompts;
+            }
+
+            // 최후: 전체 텍스트를 그대로 (0개 반환은 호출부에서 처리)
+            return prompts;
+        }
+
+        function renderPGCards() {
+            const cards = document.getElementById('pg-cards');
+            const pgResultsEl = document.getElementById('pg-results');
+            const empty = document.getElementById('pg-empty');
+            cards.innerHTML = '';
+
+            if (generatedPrompts.length === 0) {
+                pgResultsEl.classList.add('hidden'); empty.classList.remove('hidden'); return;
+            }
+            pgResultsEl.classList.remove('hidden'); empty.classList.add('hidden');
+            document.getElementById('pg-results-info').textContent = `${generatedPrompts.length}개 FX 에셋 감지됨`;
+
+            generatedPrompts.forEach((item, idx) => {
+                const card = document.createElement('div');
+                card.className = `prompt-card bg-gray-800/60 border rounded-2xl p-4 ${item.selected ? 'selected border-purple-700/50' : 'border-gray-700'}`;
+
+                const header = document.createElement('div');
+                header.className = 'flex items-start gap-3 mb-3';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = item.selected;
+                cb.className = 'mt-0.5 rounded border-gray-600 text-purple-500 flex-shrink-0 cursor-pointer';
+                cb.onchange = () => {
+                    generatedPrompts[idx].selected = cb.checked;
+                    card.className = `prompt-card bg-gray-800/60 border rounded-2xl p-4 ${cb.checked ? 'selected border-purple-700/50' : 'border-gray-700'}`;
+                };
+
+                const meta = document.createElement('div');
+                meta.className = 'flex-grow min-w-0';
+
+                const topRow = document.createElement('div');
+                topRow.className = 'flex items-center gap-2 mb-1';
+
+                const badge = document.createElement('span');
+                badge.className = `text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'image' ? 'bg-amber-900/40 text-amber-400' : 'bg-blue-900/40 text-blue-400'}`;
+                badge.textContent = item.type === 'image' ? '🖼 Image' : '🎬 Animation';
+
+                const num = document.createElement('span');
+                num.className = 'text-xs text-gray-600';
+                num.textContent = `#${item.id}`;
+
+                topRow.append(badge, num);
+
+                const ctx = document.createElement('p');
+                ctx.className = 'text-xs text-gray-400 italic truncate';
+                ctx.textContent = item.context;
+
+                meta.append(topRow, ctx);
+                header.append(cb, meta);
+
+                const ta = document.createElement('textarea');
+                ta.value = item.prompt;
+                ta.rows = 4;
+                ta.className = 'w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-gray-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none resize-none transition';
+                ta.oninput = () => { generatedPrompts[idx].prompt = ta.value; };
+
+                const actions = document.createElement('div');
+                actions.className = 'flex gap-2 mt-3';
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition';
+                copyBtn.textContent = '복사';
+                copyBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('복사됐어요!'); };
+
+                const genBtn = document.createElement('button');
+                genBtn.className = 'text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded-lg transition';
+                genBtn.textContent = '이 프롬프트로 생성';
+                if (item.type === 'animation') {
+                    genBtn.textContent = 'Higgsfield용 (복사만)';
+                    genBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
+                    genBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Grok Imagine 프롬프트 복사됐어요!'); };
+                } else {
+                    genBtn.onclick = () => runGenerationFromPrompt(item.prompt);
+                }
+
+                actions.append(copyBtn, genBtn);
+                card.append(header, ta, actions);
+                cards.appendChild(card);
+            });
+        }
+
+        let pgAbortController = null;
+
+        document.getElementById('pg-cancel-btn').onclick = () => {
+            if (pgAbortController) { pgAbortController.abort(); pgAbortController = null; }
+        };
+
+        document.getElementById('generate-prompts-btn').onclick = async () => {
+            const url = document.getElementById('notion-url-input').value.trim();
+            if (!url) return showToast('노션 링크를 입력해주세요.');
+            // 버그2: 버튼 클릭 즉시 두 키 모두 체크
+            if (!claudeKey) return showToast('Claude API 키가 필요해요. API 키 변경에서 입력하세요.');
+            if (!notionKey) return showToast('Notion Integration Token이 필요해요. API 키 변경에서 입력하세요.');
+
+            hidePGError();
+            generatedPrompts = [];
+            renderPGCards();
+
+            pgAbortController = new AbortController();
+            const signal = pgAbortController.signal;
+
+            try {
+                // 1. 스타일 가이드 로드
+                if (!systemPromptCache) {
+                    setPGLoading('스타일 가이드 불러오는 중...');
+                    const sgData = await notionFetchBlocks(STYLE_GUIDE_PAGE_ID, signal);
+                    systemPromptCache = blocksToText(sgData.results);
+                }
+
+                // 2. 스크립트 페이지 로드
+                setPGLoading('스크립트 페이지 읽는 중...');
+                const pageId = extractPageId(url);
+                if (!pageId) throw new Error('올바른 노션 링크를 입력해주세요.');
+                const pageData = await notionFetchBlocks(pageId, signal);
+                const scriptText = blocksToText(pageData.results);
+                if (!scriptText) throw new Error('페이지 내용을 읽을 수 없어요. Integration이 페이지에 연결되어 있는지 확인하세요.');
+
+                // 3. Claude 호출
+                setPGLoading('Claude가 FX 프롬프트 생성 중...');
+                const response = await callClaude(systemPromptCache, scriptText, signal);
+
+                // 4. 파싱 & 렌더
+                generatedPrompts = parseClaudeResponse(response);
+                hidePGLoading();
+                renderPGCards();
+                // 버그7: 0개일 때 명확한 메시지
+                if (generatedPrompts.length === 0) {
+                    showPGError('FX 코멘트를 찾지 못했어요. 스크립트에 FX 태그가 있는지 확인해주세요.');
+                } else {
+                    showToast(`${generatedPrompts.length}개 프롬프트 생성 완료!`);
+                }
+
+            } catch (err) {
+                hidePGLoading();
+                if (err.name === 'AbortError') {
+                    showToast('생성이 취소됐어요.');
+                } else {
+                    showPGError(`오류: ${err.message}`);
+                    console.error(err);
+                }
+            } finally {
+                pgAbortController = null;
+            }
+        };
+
+        document.getElementById('pg-select-all-btn').onclick = () => {
+            const allOn = generatedPrompts.every(p => p.selected);
+            generatedPrompts.forEach(p => p.selected = !allOn);
+            document.getElementById('pg-select-all-btn').textContent = allOn ? '전체 선택' : '전체 해제';
+            renderPGCards();
+        };
+
+        document.getElementById('pg-generate-selected-btn').onclick = () => {
+            const imgPrompts = generatedPrompts.filter(p => p.selected && p.type === 'image').map(p => p.prompt);
+            if (!imgPrompts.length) return showToast('선택된 이미지 항목이 없어요. 애니메이션은 복사 후 Higgsfield에서 사용하세요.');
+            runGenerationFromPrompts(imgPrompts);
+        };
+
+        async function runGenerationFromPrompt(prompt) { await runGenerationFromPrompts([prompt]); }
+
+        async function runGenerationFromPrompts(prompts) {
+            if (isGenerating) return showToast('이미지 생성 중이에요. 잠시 기다려주세요.');
+            if (!geminiKey) return showToast('Gemini API 키가 필요해요.');
+
+            isGenerating = true;
+            currentAbortController = new AbortController();
+            const signal = currentAbortController.signal;
+            controlDefault.classList.add('hidden');
+            controlActive.classList.remove('hidden');
+
+            try {
+                const refImages = [...slots[0], ...slots[1]];
+                for (let i = 0; i < prompts.length; i++) {
+                    if (signal.aborted) break;
+                    progressText.textContent = `Generating ${i+1}/${prompts.length}...`;
+                    modelLabel.textContent = 'Model: Nano Banana 2';
+                    const b64 = await callGeminiAPI(prompts[i], refImages, signal);
+                    if (b64) addResult(b64, slots[0][0]?.base64 || null);
+                    else throw new Error('이미지 데이터가 응답에 없어요.');
+                }
+                showToast(`${prompts.length}개 이미지 생성 완료!`);
+            } catch (err) {
+                if (err.name !== 'AbortError') { showToast(err.message); console.error(err); }
+                else showToast('생성이 중단됐어요.');
+            } finally {
+                isGenerating = false;
+                currentAbortController = null;
+                controlDefault.classList.remove('hidden');
+                controlActive.classList.add('hidden');
+                modelLabel.textContent = '';
+            }
+        }
+
+        // ── GEMINI API ──
+        async function fetchWithRetry(url, options, signal, maxRetries=5) {
+            let delay = 1000, lastError = null;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const res = await fetch(url, { ...options, signal });
+                    const text = await res.text();
+                    let data = {};
+                    try { data = text ? JSON.parse(text) : {}; } catch(e) {}
+                    if (res.ok) return data;
+                    const msg = data.error?.message;
+                    if (res.status === 401 || res.status === 403) throw Object.assign(new Error(`인증 오류 (${res.status}): API 키를 확인하거나 결제 설정을 완료해주세요.`), { fatal: true });
+                    if (res.status === 429 || res.status >= 500) throw Object.assign(new Error(msg || `서버 오류 (${res.status})`), { retryable: true });
+                    throw Object.assign(new Error(msg || `요청 실패 (${res.status})`), { fatal: true });
+                } catch(err) {
+                    if (err.name === 'AbortError') throw err;
+                    if (err.fatal) throw err;
+                    lastError = err;
+                    if (i === maxRetries - 1) throw lastError;
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        async function callGeminiAPI(prompt, images=[], signal) {
+            const parts = [{ text: prompt }];
+            images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+            const res = await fetchWithRetry(
+                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }) },
+                signal
+            );
+            return res.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+        }
+
+        // ── DOM refs ──
         const sessionCountEl = document.getElementById('session-count');
         const resultsContainer = document.getElementById('results-container');
         const uploadArea = document.getElementById('upload-area');
@@ -256,8 +692,10 @@
         const viewerModal = document.getElementById('viewer-modal');
         const viewerImg = document.getElementById('viewer-img');
 
+        // ── SLOTS ──
         function initSlots() {
             uploadArea.innerHTML = '';
+            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
             for (let i = 0; i < 3; i++) {
                 const isSlot3 = i === 2;
                 const slotEl = document.createElement('div');
@@ -269,10 +707,10 @@
                 slotContent.className = 'slot-content w-full h-full flex flex-wrap gap-1 items-start justify-center overflow-y-auto';
 
                 const emptyEl = document.createElement('div');
-                emptyEl.className = `slot-empty flex flex-col items-center justify-center gap-2 opacity-50 h-full`;
+                emptyEl.className = 'slot-empty flex flex-col items-center justify-center gap-2 opacity-50 h-full';
                 const slotLabel = document.createElement('span');
                 slotLabel.className = `text-xs font-bold uppercase tracking-widest ${isSlot3 ? 'text-indigo-400' : 'text-gray-500'}`;
-                slotLabel.textContent = `Slot ${i + 1}`;
+                slotLabel.textContent = labels[i];
                 const plusIcon = document.createElement('span');
                 plusIcon.innerHTML = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>`;
                 emptyEl.append(slotLabel, plusIcon);
@@ -289,17 +727,10 @@
                 clearBtn.onclick = (e) => { e.stopPropagation(); clearSlot(i); };
 
                 const input = document.createElement('input');
-                input.type = 'file';
-                input.multiple = true;
-                input.accept = 'image/*';
-                input.className = 'hidden';
+                input.type = 'file'; input.multiple = true; input.accept = 'image/*'; input.className = 'hidden';
                 input.onchange = (e) => { handleFiles(e.target.files, i); input.value = ''; };
 
-                slotEl.onclick = (e) => {
-                    if (e.target.closest('.delete-btn') || e.target.closest('button')) return;
-                    slotEl.focus();
-                    input.click();
-                };
+                slotEl.onclick = (e) => { if (e.target.closest('.delete-btn') || e.target.closest('button')) return; slotEl.focus(); input.click(); };
                 slotEl.ondragover = (e) => { e.preventDefault(); slotEl.classList.add('dragover'); };
                 slotEl.ondragleave = () => slotEl.classList.remove('dragover');
                 slotEl.ondrop = (e) => { e.preventDefault(); slotEl.classList.remove('dragover'); handleFiles(e.dataTransfer.files, i); };
@@ -310,7 +741,6 @@
                     for (const item of items) { if (item.type.indexOf("image") !== -1) { const f = item.getAsFile(); if (f) pf.push(f); } }
                     if (pf.length > 0) { e.preventDefault(); handleFiles(pf, i); }
                 };
-
                 slotEl.append(slotContent, countLabel, clearBtn, input);
                 uploadArea.appendChild(slotEl);
             }
@@ -330,12 +760,7 @@
         }
 
         function toBase64(file) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(file); }); }
-
-        function clearSlot(idx) {
-            slots[idx].forEach(img => URL.revokeObjectURL(img.url));
-            slots[idx] = [];
-            renderSlot(idx);
-        }
+        function clearSlot(idx) { slots[idx].forEach(img => URL.revokeObjectURL(img.url)); slots[idx] = []; renderSlot(idx); }
 
         function renderSlot(idx) {
             const slotEl = uploadArea.children[idx];
@@ -343,30 +768,27 @@
             const countLabel = slotEl.querySelector(`#slot-count-${idx}`);
             const clearBtn = slotEl.querySelector(`#slot-clear-${idx}`);
             const isSlot3 = idx === 2;
+            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
             content.innerHTML = '';
-
             if (slots[idx].length === 0) {
                 const emptyEl = document.createElement('div');
                 emptyEl.className = 'slot-empty flex flex-col items-center justify-center gap-2 opacity-30 h-full w-full';
                 const label = document.createElement('span');
                 label.className = `text-xs font-bold uppercase tracking-widest ${isSlot3 ? 'text-indigo-400' : 'text-gray-500'}`;
-                label.textContent = `Slot ${idx + 1}`;
+                label.textContent = labels[idx];
                 const icon = document.createElement('span');
                 icon.innerHTML = `<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>`;
                 emptyEl.append(label, icon);
                 content.appendChild(emptyEl);
-                countLabel.classList.add('hidden');
-                clearBtn.classList.add('hidden');
+                countLabel.classList.add('hidden'); clearBtn.classList.add('hidden');
             } else {
-                countLabel.classList.remove('hidden');
-                countLabel.textContent = `${slots[idx].length}/10`;
+                countLabel.classList.remove('hidden'); countLabel.textContent = `${slots[idx].length}/10`;
                 clearBtn.classList.remove('hidden');
                 slots[idx].forEach((img, i) => {
                     const d = document.createElement('div');
                     d.className = 'relative w-12 h-12 rounded-lg overflow-hidden group border border-gray-700 flex-shrink-0';
                     const thumb = document.createElement('img');
-                    thumb.src = img.url;
-                    thumb.className = 'w-full h-full object-cover';
+                    thumb.src = img.url; thumb.className = 'w-full h-full object-cover';
                     const delBtn = document.createElement('button');
                     delBtn.className = 'delete-btn absolute inset-0 bg-red-900/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity';
                     delBtn.innerHTML = '<span class="text-white text-lg">&times;</span>';
@@ -377,120 +799,40 @@
             }
         }
 
-        function deleteImage(si, ii) {
-            URL.revokeObjectURL(slots[si][ii].url);
-            slots[si].splice(ii, 1);
-            renderSlot(si);
-        }
+        function deleteImage(si, ii) { URL.revokeObjectURL(slots[si][ii].url); slots[si].splice(ii, 1); renderSlot(si); }
 
-        async function fetchWithRetry(url, options, signal, maxRetries=5) {
-            let delay = 1000;
-            let lastError = null;
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const res = await fetch(url, { ...options, signal });
-                    const text = await res.text();
-                    let data = {};
-                    try { data = text ? JSON.parse(text) : {}; } catch(e) {}
-                    if (res.ok) return data;
-                    const msg = data.error?.message;
-                    if (res.status === 401 || res.status === 403) {
-                        throw Object.assign(new Error(`인증 오류 (${res.status}): API 키를 확인하거나 결제 설정을 완료해주세요.`), { fatal: true });
-                    }
-                    if (res.status === 429 || res.status >= 500) {
-                        throw Object.assign(new Error(msg || `서버 오류 (${res.status})`), { retryable: true });
-                    }
-                    throw Object.assign(new Error(msg || `요청 실패 (${res.status})`), { fatal: true });
-                } catch(err) {
-                    if (err.name === 'AbortError') throw err;
-                    if (err.fatal) throw err;
-                    // retryable: 429/5xx AND network errors (TypeError: Failed to fetch)
-                    lastError = err;
-                    if (i === maxRetries - 1) throw lastError;
-                    await new Promise(r => setTimeout(r, delay));
-                    delay *= 2;
-                }
-            }
-        }
-
-        async function callAPI(prompt, images=[], signal) {
-            const model = images.length > 0 ? MODELS.vision : MODELS.generation;
-            const parts = [{text: prompt}];
-            if (images.length > 0) {
-                images.forEach(img => parts.push({inlineData:{mimeType:img.mimeType||'image/png',data:img.base64}}));
-            }
-            const res = await fetchWithRetry(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                { method:'POST', headers:{'Content-Type':'application/json'},
-                  body: JSON.stringify({ contents:[{parts}], generationConfig:{responseModalities:['TEXT','IMAGE']} }) },
-                signal
-            );
-            return res.candidates?.[0]?.content?.parts?.find(p=>p.inlineData)?.inlineData?.data;
-        }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !viewerModal.classList.contains('hidden')) {
-                viewerModal.classList.add('hidden');
-                viewerModal.classList.remove('flex');
-            }
-        });
-
-        function showToast(msg) {
-            if (toastTimer) clearTimeout(toastTimer);
-            toastMsg.textContent = msg;
-            toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-100 translate-y-0';
-            toastTimer = setTimeout(() => {
-                toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-0 translate-y-10 pointer-events-none';
-            }, 3000);
-        }
-
+        // ── GALLERY ──
         function addResult(base64, refBase64=null) {
             if (!base64) return;
             if (resultsContainer.querySelector('.col-span-2')) resultsContainer.innerHTML = '';
-            bulkActions.classList.remove('hidden');
-            bulkActions.classList.add('flex');
-
+            bulkActions.classList.remove('hidden'); bulkActions.classList.add('flex');
             const idx = results.length;
             results.push({ base64, refBase64 });
             const url = `data:image/png;base64,${base64}`;
-
             const div = document.createElement('div');
             div.className = 'image-card-hover relative aspect-square rounded-2xl overflow-hidden bg-gray-800 border border-gray-700 animate-fade-in group cursor-pointer shadow-lg';
-            div.dataset.resultIndex = idx;
-
             const img = document.createElement('img');
-            img.src = url;
-            img.className = 'w-full h-full object-cover';
-
+            img.src = url; img.className = 'w-full h-full object-cover';
             const overlay = document.createElement('div');
             overlay.className = 'image-overlay opacity-0 group-hover:opacity-100 absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 transition-opacity';
-
             const viewBtn = document.createElement('button');
             viewBtn.className = 'bg-white text-black text-xs font-bold px-4 py-2 rounded-full hover:scale-105 transition';
             viewBtn.textContent = 'View';
             viewBtn.onclick = (e) => { e.stopPropagation(); openViewer(idx); };
-
             const saveLink = document.createElement('a');
-            saveLink.href = url;
-            saveLink.download = `FXGen_${Date.now()}.png`;
+            saveLink.href = url; saveLink.download = `FXGen_${Date.now()}.png`;
             saveLink.className = 'bg-amber-500 text-black text-xs font-bold px-4 py-2 rounded-full hover:scale-105 transition';
             saveLink.textContent = 'Save';
-
             overlay.append(viewBtn, saveLink);
             div.append(img, overlay);
             resultsContainer.prepend(div);
-
-            sessionCount++;
-            sessionCountEl.textContent = sessionCount;
-
+            sessionCount++; sessionCountEl.textContent = sessionCount;
             if (document.getElementById('auto-download').checked) {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `FXGen_${Date.now()}.png`;
-                a.click();
+                const a = document.createElement('a'); a.href = url; a.download = `FXGen_${Date.now()}.png`; a.click();
             }
         }
 
+        // ── PRESET LIBRARY ──
         const defaultPrompts = [
             "white background, pure character render. Remove the background leaving only the main subject, and replace the background with a solid white color",
             "2.5D iOS emoji style",
@@ -509,96 +851,69 @@
             savedPrompts.forEach((p, i) => {
                 const row = document.createElement('div');
                 row.className = 'flex items-center gap-2 group';
-
                 const label = document.createElement('label');
                 label.className = 'flex-grow flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 p-2 rounded-xl cursor-pointer border border-transparent hover:border-gray-700 transition';
-
                 const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.className = 'prompt-cb rounded bg-gray-900 border-gray-700 text-amber-500 flex-shrink-0';
-                cb.dataset.promptIndex = i;
-
+                cb.type = 'checkbox'; cb.className = 'prompt-cb rounded bg-gray-900 border-gray-700 text-amber-500 flex-shrink-0'; cb.dataset.promptIndex = i;
                 const text = document.createElement('span');
-                text.className = 'text-xs text-gray-300 truncate';
-                text.textContent = p;
-
+                text.className = 'text-xs text-gray-300 truncate'; text.textContent = p;
                 label.append(cb, text);
-
                 const delBtn = document.createElement('button');
                 delBtn.className = 'opacity-0 group-hover:opacity-100 p-2 text-gray-500 hover:text-red-400 transition flex-shrink-0';
-                delBtn.textContent = '×';
-                delBtn.onclick = () => removePrompt(i);
-
+                delBtn.textContent = '×'; delBtn.onclick = () => removePrompt(i);
                 row.append(label, delBtn);
                 container.appendChild(row);
             });
         }
 
-        function removePrompt(i) {
-            savedPrompts.splice(i, 1);
-            localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
-            renderPrompts();
-        }
+        function removePrompt(i) { savedPrompts.splice(i, 1); localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts)); renderPrompts(); }
 
         document.getElementById('add-prompt-btn').onclick = () => {
             const inp = document.getElementById('new-prompt-input');
             const val = inp.value.trim();
-            if (val) {
-                savedPrompts.push(val);
-                localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
-                inp.value = '';
-                renderPrompts();
-            }
+            if (val) { savedPrompts.push(val); localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts)); inp.value = ''; renderPrompts(); }
         };
-
-        document.getElementById('new-prompt-input').onkeydown = (e) => {
-            if (e.key === 'Enter') document.getElementById('add-prompt-btn').click();
-        };
+        document.getElementById('new-prompt-input').onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('add-prompt-btn').click(); };
 
         function getFullPrompt() {
-            const selected = Array.from(document.querySelectorAll('.prompt-cb:checked')).map(cb => {
-                return savedPrompts[parseInt(cb.dataset.promptIndex)];
-            });
+            const selected = Array.from(document.querySelectorAll('.prompt-cb:checked')).map(cb => savedPrompts[parseInt(cb.dataset.promptIndex)]);
             const extra = document.getElementById('general-prompt').value.trim();
             return [...selected, extra].filter(x => x).join(', ');
         }
 
+        // ── STANDARD GENERATION ──
         async function runGeneration(mode) {
             if (isGenerating) return;
-            if (!apiKey) return showToast("API 키를 먼저 입력해주세요.");
+            if (!geminiKey) return showToast("API 키를 먼저 입력해주세요.");
             const prompt = getFullPrompt();
             if (!prompt) return showToast("Please add some instructions/prompts.");
-
             isGenerating = true;
             currentAbortController = new AbortController();
             const signal = currentAbortController.signal;
-
-            controlDefault.classList.add('hidden');
-            controlActive.classList.remove('hidden');
-
+            controlDefault.classList.add('hidden'); controlActive.classList.remove('hidden');
             try {
                 if (mode === 'single') {
                     const refImages = [...slots[0], ...slots[1]];
-                    modelLabel.textContent = `Model: Nano Banana 2`;
+                    modelLabel.textContent = 'Model: Nano Banana 2';
                     for (let i = 0; i < counts.single; i++) {
                         if (signal.aborted) break;
                         progressText.textContent = `Generating Image ${i+1}/${counts.single}...`;
-                        const b64 = await callAPI(prompt, refImages, signal);
+                        const b64 = await callGeminiAPI(prompt, refImages, signal);
                         if (b64) addResult(b64, slots[0][0]?.base64 || null);
                         else throw new Error("이미지 데이터가 응답에 포함되지 않았습니다.");
                     }
                 } else {
                     const styleRefs = [...slots[0], ...slots[1]];
-                    const targets = [...slots[2]]; // snapshot — prevents live mutation during iteration
+                    const targets = [...slots[2]];
                     if (!targets.length) throw new Error("Slot 3 is empty.");
-                    modelLabel.textContent = `Model: Nano Banana 2`;
+                    modelLabel.textContent = 'Model: Nano Banana 2';
                     const total = targets.length * counts.bulk;
                     let count = 0;
                     for (const target of targets) {
                         for (let i = 0; i < counts.bulk; i++) {
                             if (signal.aborted) break;
                             progressText.textContent = `Batch Processing ${++count}/${total}...`;
-                            const b64 = await callAPI(prompt, [...styleRefs, target], signal);
+                            const b64 = await callGeminiAPI(prompt, [...styleRefs, target], signal);
                             if (b64) addResult(b64, target.base64);
                         }
                         if (signal.aborted) break;
@@ -608,86 +923,65 @@
                 if (err.name !== 'AbortError') { console.error(err); showToast(err.message); }
                 else showToast("생성이 중단됐어요.");
             } finally {
-                isGenerating = false;
-                currentAbortController = null;
-                controlDefault.classList.remove('hidden');
-                controlActive.classList.add('hidden');
+                isGenerating = false; currentAbortController = null;
+                controlDefault.classList.remove('hidden'); controlActive.classList.add('hidden');
                 modelLabel.textContent = '';
             }
         }
 
         document.getElementById('gen-single-btn').onclick = () => runGeneration('single');
         document.getElementById('gen-bulk-btn').onclick = () => runGeneration('bulk');
-        document.getElementById('cancel-btn').onclick = () => {
-            if (currentAbortController) { currentAbortController.abort(); showToast("Stopping..."); }
-        };
+        document.getElementById('cancel-btn').onclick = () => { if (currentAbortController) { currentAbortController.abort(); showToast("Stopping..."); } };
         document.getElementById('clear-results-btn').onclick = () => {
-            resultsContainer.innerHTML = '';
-            results = [];
-            bulkActions.classList.add('hidden');
-            bulkActions.classList.remove('flex');
+            resultsContainer.innerHTML = '<div class="col-span-2 py-20 flex flex-col items-center justify-center text-gray-600 opacity-40"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><p class="text-sm">Created images will appear here</p></div>';
+            results = []; bulkActions.classList.add('hidden'); bulkActions.classList.remove('flex');
         };
         document.getElementById('clear-session-btn').onclick = () => {
-            sessionCount = 0;
-            sessionCountEl.textContent = '0';
+            sessionCount = 0; sessionCountEl.textContent = '0';
             slots.forEach((s, i) => { s.forEach(img => URL.revokeObjectURL(img.url)); slots[i] = []; });
             for (let i = 0; i < 3; i++) renderSlot(i);
             results = [];
             resultsContainer.innerHTML = '<div class="col-span-2 py-20 flex flex-col items-center justify-center text-gray-600 opacity-40"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><p class="text-sm">Created images will appear here</p></div>';
-            bulkActions.classList.add('hidden');
-            bulkActions.classList.remove('flex');
+            bulkActions.classList.add('hidden'); bulkActions.classList.remove('flex');
             document.getElementById('general-prompt').value = '';
             document.querySelectorAll('.prompt-cb').forEach(cb => cb.checked = false);
             showToast('모든 데이터가 초기화됐어요.');
         };
         window.updateCount = (type, val) => { counts[type] = Math.max(1, Math.min(10, counts[type] + val)); document.getElementById(`${type}-count`).textContent = counts[type]; };
 
-        // Viewer
+        // ── VIEWER ──
         let currentViewerIndex = null;
-
         function openViewer(idx) {
             currentViewerIndex = idx;
             const { base64, refBase64 } = results[idx];
             viewerImg.src = `data:image/png;base64,${base64}`;
             const toggleBtn = document.getElementById('viewer-toggle');
             toggleBtn.classList.toggle('hidden', !refBase64);
-            viewerModal.classList.remove('hidden');
-            viewerModal.classList.add('flex');
+            viewerModal.classList.remove('hidden'); viewerModal.classList.add('flex');
         }
-
         function showReference(show) {
             if (currentViewerIndex === null) return;
             const { base64, refBase64 } = results[currentViewerIndex];
             const overlay = document.getElementById('viewer-original-overlay');
-            if (show && refBase64) {
-                viewerImg.src = `data:image/png;base64,${refBase64}`;
-                overlay.classList.add('opacity-100');
-            } else {
-                viewerImg.src = `data:image/png;base64,${base64}`;
-                overlay.classList.remove('opacity-100');
-            }
+            if (show && refBase64) { viewerImg.src = `data:image/png;base64,${refBase64}`; overlay.classList.add('opacity-100'); }
+            else { viewerImg.src = `data:image/png;base64,${base64}`; overlay.classList.remove('opacity-100'); }
         }
-
-        document.getElementById('close-viewer').onclick = () => {
-            viewerModal.classList.add('hidden');
-            viewerModal.classList.remove('flex');
-        };
-
+        document.getElementById('close-viewer').onclick = () => { viewerModal.classList.add('hidden'); viewerModal.classList.remove('flex'); };
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !viewerModal.classList.contains('hidden')) { viewerModal.classList.add('hidden'); viewerModal.classList.remove('flex'); } });
         const viewerToggle = document.getElementById('viewer-toggle');
         viewerToggle.onmousedown = () => showReference(true);
         viewerToggle.onmouseup = () => showReference(false);
         viewerToggle.onmouseleave = () => showReference(false);
         viewerToggle.ontouchstart = (e) => { e.preventDefault(); showReference(true); };
         viewerToggle.ontouchend = (e) => { e.preventDefault(); showReference(false); };
-
         document.getElementById('viewer-download').onclick = () => {
             if (currentViewerIndex === null) return;
             const a = document.createElement('a');
             a.href = `data:image/png;base64,${results[currentViewerIndex].base64}`;
-            a.download = `FXGen_HQ_${Date.now()}.png`;
-            a.click();
+            a.download = `FXGen_HQ_${Date.now()}.png`; a.click();
         };
 
+        // ── INIT ──
         initSlots();
         renderPrompts();
     </script>
