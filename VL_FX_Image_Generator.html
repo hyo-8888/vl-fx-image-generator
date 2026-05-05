@@ -201,7 +201,7 @@
                                 <div class="flex items-center justify-between mb-3">
                                     <div class="flex flex-col">
                                         <span class="text-sm font-medium text-indigo-300">Slot 3 Batch Transform</span>
-                                        <span class="text-[10px] text-indigo-400/70 italic">Uses Slot 1+2 as style reference</span>
+                                        <span class="text-[10px] text-indigo-400/70 italic">Uses Slot 1 (character) + Slot 2 (object/BG) as style reference</span>
                                     </div>
                                     <div class="flex items-center bg-gray-950 rounded-lg p-1">
                                         <button class="w-6 h-6 rounded flex items-center justify-center hover:bg-gray-800 text-indigo-400" onclick="updateCount('bulk',-1)">-</button>
@@ -790,10 +790,24 @@
         async function callGeminiAPI(prompt, images=[], signal) {
             const parts = [{ text: prompt }];
             images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
+
+            const systemText = [
+                'You are an FX image generator for video lesson production.',
+                slots[0].length ? 'Reference images from Slot 1 are CHARACTER STYLE references — use them for rendering style, color palette, and line quality only. Do NOT copy the face, outfit, pose, or identity from these references.' : '',
+                slots[1].length ? 'Reference images from Slot 2 are OBJECT/BACKGROUND STYLE references — use them for environment style, object design, and background mood.' : '',
+                'Generate a single high-quality image based on the prompt.'
+            ].filter(Boolean).join(' ');
+
+            const requestBody = {
+                contents: [{ parts }],
+                generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+                systemInstruction: { parts: [{ text: systemText }] }
+            };
+
             const res = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`,
                 { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ contents: [{ parts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } }) },
+                  body: JSON.stringify(requestBody) },
                 signal
             );
             return res.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
@@ -814,7 +828,7 @@
         // ── SLOTS ──
         function initSlots() {
             uploadArea.innerHTML = '';
-            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
+            const labels = ['Slot 1 — Character Style Ref', 'Slot 2 — Object/BG Style Ref', 'Slot 3 — Batch Target'];
             for (let i = 0; i < 3; i++) {
                 const isSlot3 = i === 2;
                 const slotEl = document.createElement('div');
@@ -887,7 +901,7 @@
             const countLabel = slotEl.querySelector(`#slot-count-${idx}`);
             const clearBtn = slotEl.querySelector(`#slot-clear-${idx}`);
             const isSlot3 = idx === 2;
-            const labels = ['Slot 1 — Style Ref', 'Slot 2 — Style Ref', 'Slot 3 — Batch Target'];
+            const labels = ['Slot 1 — Character Style Ref', 'Slot 2 — Object/BG Style Ref', 'Slot 3 — Batch Target'];
             content.innerHTML = '';
             if (slots[idx].length === 0) {
                 const emptyEl = document.createElement('div');
