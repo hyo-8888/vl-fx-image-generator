@@ -273,6 +273,7 @@
         const GEMINI_MODEL = "gemini-3.1-flash-image-preview";
         const CLAUDE_MODEL = "claude-sonnet-4-5";
         const NOTION_PROXY_URL = "https://notion-proxy.hyo-047.workers.dev";
+
         const STYLE_GUIDE_PAGE_ID = "352792ec2f10816b9ba9efa7954479d5";
 
         // ── STATE ──
@@ -631,7 +632,7 @@
                     systemPromptCache = blocksToRichText(sgData.results);
                 }
 
-                // 2. Load script page + comments
+                // 2. Load script page + inline FX comments
                 setPGLoading('Reading script page and FX comments...');
                 const pageId = extractPageId(url);
                 if (!pageId) throw new Error('Please enter a valid Notion link.');
