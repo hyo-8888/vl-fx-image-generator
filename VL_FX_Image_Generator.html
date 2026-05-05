@@ -366,15 +366,35 @@
             return allBlocks;
         }
 
-        // Fetch blocks + recursively fetch children of toggle/column blocks
+        async function notionFetchComments(blockId, signal) {
+            const res = await fetch(NOTION_PROXY_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blockId, token: notionKey, type: 'comments' }),
+                signal
+            });
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.results || [];
+        }
+
+        // Fetch blocks + children of toggles + inline comments on each block
         async function notionFetchBlocks(pageId, signal) {
             const blocks = await notionFetchBlocksRaw(pageId, signal);
-            // Fetch children for blocks that have them (toggle, columns, etc.)
             for (const block of blocks) {
+                // Fetch toggle children
                 if (block.has_children) {
                     const children = await notionFetchBlocksRaw(block.id, signal);
                     block._children = children;
+                    // Also fetch comments on each child block
+                    for (const child of children) {
+                        const comments = await notionFetchComments(child.id, signal);
+                        if (comments.length > 0) child._comments = comments;
+                    }
                 }
+                // Fetch comments on top-level blocks
+                const comments = await notionFetchComments(block.id, signal);
+                if (comments.length > 0) block._comments = comments;
             }
             return { results: blocks };
         }
@@ -414,6 +434,14 @@
                     text += `| ${cells} |\n`;
                 }
                 else if (c?.rich_text) text += rt(c.rich_text) + '\n';
+
+                // Append inline comments on this block
+                if (b._comments && b._comments.length > 0) {
+                    for (const comment of b._comments) {
+                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
+                        if (commentText) text += `[FX COMMENT] ${commentText}\n`;
+                    }
+                }
 
                 // Recurse into any other children
                 if (b._children && type !== 'toggle') text += blocksToRichText(b._children);
@@ -603,8 +631,8 @@
                     systemPromptCache = blocksToRichText(sgData.results);
                 }
 
-                // 2. Load script page
-                setPGLoading('Reading script page...');
+                // 2. Load script page + comments
+                setPGLoading('Reading script page and FX comments...');
                 const pageId = extractPageId(url);
                 if (!pageId) throw new Error('Please enter a valid Notion link.');
                 const pageData = await notionFetchBlocks(pageId, signal);
