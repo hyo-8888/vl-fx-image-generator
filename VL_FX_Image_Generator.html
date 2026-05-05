@@ -37,34 +37,34 @@
                     </svg>
                 </div>
                 <div>
-                    <h2 class="text-lg font-bold text-white">API 키 설정</h2>
-                    <p class="text-xs text-gray-400">최초 1회 입력 후 브라우저에 저장돼요</p>
+                    <h2 class="text-lg font-bold text-white">API Key Setup</h2>
+                    <p class="text-xs text-gray-400">Saved in your browser after first entry</p>
                 </div>
             </div>
-            <p class="text-xs text-gray-500 mb-5 pl-1">Gemini 키만 있어도 이미지 생성 가능. Claude 키는 자동 프롬프트 생성에 필요해요.</p>
+            <p class="text-xs text-gray-500 mb-5 pl-1">Gemini key is required for image generation. Claude key is needed for auto prompt generation.</p>
             <div class="space-y-4 mb-5">
                 <div>
-                    <label class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1.5 block">Gemini API Key <span class="text-red-400">*필수</span></label>
+                    <label class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1.5 block">Gemini API Key <span class="text-red-400">*required</span></label>
                     <input type="password" id="gemini-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="AIza...">
-                    <p class="text-[10px] text-gray-500 mt-1 pl-1"><a href="https://aistudio.google.com/apikey" target="_blank" class="text-amber-500 underline">aistudio.google.com</a>에서 발급</p>
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1">Get yours at <a href="https://aistudio.google.com/apikey" target="_blank" class="text-amber-500 underline">aistudio.google.com</a></p>
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-purple-400 uppercase tracking-widest mb-1.5 block">Claude API Key <span class="text-gray-500">(프롬프트 자동생성용)</span></label>
+                    <label class="text-xs font-bold text-purple-400 uppercase tracking-widest mb-1.5 block">Claude API Key <span class="text-gray-500">(for auto prompt generation)</span></label>
                     <input type="password" id="claude-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="sk-ant-...">
-                    <p class="text-[10px] text-gray-500 mt-1 pl-1"><a href="https://console.anthropic.com" target="_blank" class="text-purple-400 underline">console.anthropic.com</a>에서 발급</p>
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1">Get yours at <a href="https://console.anthropic.com" target="_blank" class="text-purple-400 underline">console.anthropic.com</a></p>
                 </div>
                 <div>
-                    <label class="text-xs font-bold text-green-400 uppercase tracking-widest mb-1.5 block">Notion Integration Token <span class="text-gray-500">(노션 링크 자동 파싱용)</span></label>
+                    <label class="text-xs font-bold text-green-400 uppercase tracking-widest mb-1.5 block">Notion Integration Token <span class="text-gray-500">(for auto Notion page parsing)</span></label>
                     <input type="password" id="notion-key-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 outline-none" placeholder="ntn_...">
-                    <p class="text-[10px] text-gray-500 mt-1 pl-1">Speak 워크스페이스 관리자에게 요청</p>
+                    <p class="text-[10px] text-gray-500 mt-1 pl-1">Ask your Speak workspace admin</p>
                 </div>
             </div>
-            <div id="api-key-error" class="hidden text-xs text-red-400 mb-3 px-1">Gemini API 키를 확인해주세요. (AIza로 시작)</div>
+            <div id="api-key-error" class="hidden text-xs text-red-400 mb-3 px-1">Invalid Gemini API key. (must start with AIza)</div>
             <div class="flex items-center gap-2 mb-5">
                 <input type="checkbox" id="save-key-cb" checked class="rounded bg-gray-800 border-gray-700 text-amber-500">
-                <label for="save-key-cb" class="text-xs text-gray-400">이 브라우저에 저장 (다음에 자동 입력)</label>
+                <label for="save-key-cb" class="text-xs text-gray-400">Save in this browser (auto-filled next time)</label>
             </div>
-            <button id="api-confirm-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold py-3 rounded-xl transition">시작하기</button>
+            <button id="api-confirm-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold py-3 rounded-xl transition">Get Started</button>
         </div>
     </div>
 
@@ -88,7 +88,7 @@
                 </div>
                 <div class="w-px h-8 bg-gray-800"></div>
                 <button id="clear-session-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 px-3 py-1.5 rounded-lg transition">Reset</button>
-                <button id="change-key-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-amber-400 px-3 py-1.5 rounded-lg transition">API 키 변경</button>
+                <button id="change-key-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-amber-400 px-3 py-1.5 rounded-lg transition">API Keys</button>
             </div>
         </header>
 
@@ -97,20 +97,20 @@
             <div class="flex items-center gap-2 mb-5">
                 <span class="w-2 h-2 rounded-full bg-purple-500"></span>
                 <h2 class="text-lg font-bold">Prompt Generator</h2>
-                <span class="text-xs text-gray-500 ml-1">노션 스크립트 링크 → Claude가 FX 프롬프트 자동 생성</span>
+                <span class="text-xs text-gray-500 ml-1">Notion script link → Claude auto-generates FX prompts</span>
             </div>
             <div class="flex gap-3 mb-4">
-                <input type="text" id="notion-url-input" placeholder="노션 스크립트 페이지 링크를 붙여넣으세요..." class="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition">
+                <input type="text" id="notion-url-input" placeholder="Paste your Notion script page link here..." class="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition">
                 <button id="generate-prompts-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-3 rounded-xl transition flex items-center gap-2 whitespace-nowrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
-                    프롬프트 생성
+                    Generate Prompts
                 </button>
             </div>
             <!-- Loading -->
             <div id="pg-loading" class="hidden items-center gap-3 text-sm text-purple-300 mb-4">
                 <div class="loader-sm"></div>
-                <span id="pg-loading-text">노션 페이지 읽는 중...</span>
-                <button id="pg-cancel-btn" class="ml-2 text-xs text-red-400 hover:text-red-300 underline underline-offset-4">취소</button>
+                <span id="pg-loading-text">Reading Notion page...</span>
+                <button id="pg-cancel-btn" class="ml-2 text-xs text-red-400 hover:text-red-300 underline underline-offset-4">Cancel</button>
             </div>
             <!-- Error -->
             <div id="pg-error" class="hidden text-xs text-red-400 bg-red-900/20 border border-red-900/30 rounded-xl px-4 py-3 mb-4"></div>
@@ -119,10 +119,10 @@
                 <div class="flex items-center justify-between mb-3">
                     <p id="pg-results-info" class="text-xs text-gray-500"></p>
                     <div class="flex gap-2">
-                        <button id="pg-select-all-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">전체 선택</button>
+                        <button id="pg-select-all-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">Select All</button>
                         <button id="pg-generate-selected-btn" class="text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-4 py-1.5 rounded-lg transition flex items-center gap-1.5">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/></svg>
-                            선택 항목 이미지 생성
+                            Generate Selected
                         </button>
                     </div>
                 </div>
@@ -131,8 +131,8 @@
             <!-- Empty -->
             <div id="pg-empty" class="flex flex-col items-center justify-center py-10 text-gray-600 opacity-40">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <p class="text-sm">노션 링크를 입력하고 프롬프트를 생성하세요</p>
-                <p class="text-xs mt-1">Claude API 키가 필요해요</p>
+                <p class="text-sm">Paste a Notion link and generate prompts</p>
+                <p class="text-xs mt-1">Claude API key required</p>
             </div>
         </section>
 
@@ -341,10 +341,10 @@
         }
 
         async function notionFetchBlocks(pageId, signal) {
-            if (!notionKey) throw new Error('Notion Integration Token이 필요해요. API 키 변경에서 입력하세요.');
+            if (!notionKey) throw new Error('Notion Integration Token required. Enter it via API Keys.');
             let allBlocks = [];
             let cursor = undefined;
-            // pagination 처리 — 100블록 넘으면 계속 가져오기
+            // pagination — fetch all blocks (100 per page)
             while (true) {
                 const body = { pageId, token: notionKey };
                 if (cursor) body.cursor = cursor;
@@ -355,8 +355,8 @@
                     signal
                 });
                 if (!res.ok) {
-                    let errMsg = `Notion 오류 (${res.status})`;
-                    try { const e = await res.json(); errMsg = e.message || e.error || errMsg; } catch(e) {}
+                    let errMsg = `Notion error (${res.status})`;
+                    try { const e = await res.json(); errMsg = e.message || e.error || errMsg; } catch(e2) {}
                     throw new Error(errMsg);
                 }
                 const data = await res.json();
@@ -389,7 +389,7 @@
                 body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }] }),
                 signal
             });
-            if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Claude 오류 (${res.status})`); }
+            if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Claude error (${res.status})`); }
             const d = await res.json();
             return d.content[0].text;
         }
@@ -412,7 +412,7 @@
 
         function parseClaudeResponse(text) {
             const prompts = [];
-            // 1차: 이모지 기반 파싱 (🖼/🎬)
+            // 1st: emoji-based parsing (🖼/🎬)
             const re = /(🖼|🎬)\s+\*\*#(\d+)[^*]*\*\*[^\n]*\n>(.*?)\n+([\s\S]*?)(?=\n---|\n🖼|\n🎬|$)/g;
             let m;
             while ((m = re.exec(text)) !== null) {
@@ -425,27 +425,27 @@
             }
             if (prompts.length > 0) return prompts;
 
-            // 2차: 코드블록 기반 파싱 (이모지 없을 때)
+            // 2nd: code block parsing (no emoji)
             const codeBlocks = [...text.matchAll(/```[\w]*\n?([\s\S]*?)```/g)];
             if (codeBlocks.length > 0) {
                 codeBlocks.forEach((cb, i) => {
                     const prompt = cb[1].trim();
-                    if (prompt) prompts.push({ id: String(i+1), type: 'image', context: `프롬프트 ${i+1}`, prompt, selected: true });
+                    if (prompt) prompts.push({ id: String(i+1), type: 'image', context: `Prompt ${i+1}`, prompt, selected: true });
                 });
                 return prompts;
             }
 
-            // 3차: 섹션 기반 파싱 (#1, #2 등 번호 패턴)
+            // 3rd: section-based parsing (#1, #2 number pattern)
             const sections = text.split(/\n(?=#+\s*#?\d+|---)/);
             if (sections.length > 1) {
                 sections.forEach((s, i) => {
                     const prompt = s.replace(/^[#\-\s]+/, '').trim();
-                    if (prompt.length > 20) prompts.push({ id: String(i+1), type: 'image', context: `프롬프트 ${i+1}`, prompt, selected: true });
+                    if (prompt.length > 20) prompts.push({ id: String(i+1), type: 'image', context: `Prompt ${i+1}`, prompt, selected: true });
                 });
                 if (prompts.length > 0) return prompts;
             }
 
-            // 최후: 전체 텍스트를 그대로 (0개 반환은 호출부에서 처리)
+            // fallback: return empty (handled by caller)
             return prompts;
         }
 
@@ -459,7 +459,7 @@
                 pgResultsEl.classList.add('hidden'); empty.classList.remove('hidden'); return;
             }
             pgResultsEl.classList.remove('hidden'); empty.classList.add('hidden');
-            document.getElementById('pg-results-info').textContent = `${generatedPrompts.length}개 FX 에셋 감지됨`;
+            document.getElementById('pg-results-info').textContent = `${generatedPrompts.length} FX assets detected`;
 
             generatedPrompts.forEach((item, idx) => {
                 const card = document.createElement('div');
@@ -511,16 +511,16 @@
 
                 const copyBtn = document.createElement('button');
                 copyBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition';
-                copyBtn.textContent = '복사';
-                copyBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('복사됐어요!'); };
+                copyBtn.textContent = 'Copy';
+                copyBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Copied!'); };
 
                 const genBtn = document.createElement('button');
                 genBtn.className = 'text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded-lg transition';
-                genBtn.textContent = '이 프롬프트로 생성';
+                genBtn.textContent = 'Generate with this prompt';
                 if (item.type === 'animation') {
-                    genBtn.textContent = 'Higgsfield용 (복사만)';
+                    genBtn.textContent = 'For Higgsfield (copy only)';
                     genBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
-                    genBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Grok Imagine 프롬프트 복사됐어요!'); };
+                    genBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Higgsfield prompt copied!'); };
                 } else {
                     genBtn.onclick = () => runGenerationFromPrompt(item.prompt);
                 }
@@ -539,10 +539,9 @@
 
         document.getElementById('generate-prompts-btn').onclick = async () => {
             const url = document.getElementById('notion-url-input').value.trim();
-            if (!url) return showToast('노션 링크를 입력해주세요.');
-            // 버그2: 버튼 클릭 즉시 두 키 모두 체크
-            if (!claudeKey) return showToast('Claude API 키가 필요해요. API 키 변경에서 입력하세요.');
-            if (!notionKey) return showToast('Notion Integration Token이 필요해요. API 키 변경에서 입력하세요.');
+            if (!url) return showToast('Please enter a Notion link.');
+            if (!claudeKey) return showToast('Claude API key required. Enter it via API Keys.');
+            if (!notionKey) return showToast('Notion Integration Token required. Enter it via API Keys.');
 
             hidePGError();
             generatedPrompts = [];
@@ -552,42 +551,41 @@
             const signal = pgAbortController.signal;
 
             try {
-                // 1. 스타일 가이드 로드
+                // 1. Load style guide
                 if (!systemPromptCache) {
-                    setPGLoading('스타일 가이드 불러오는 중...');
+                    setPGLoading('Loading style guide...');
                     const sgData = await notionFetchBlocks(STYLE_GUIDE_PAGE_ID, signal);
                     systemPromptCache = blocksToText(sgData.results);
                 }
 
-                // 2. 스크립트 페이지 로드
-                setPGLoading('스크립트 페이지 읽는 중...');
+                // 2. Load script page
+                setPGLoading('Reading script page...');
                 const pageId = extractPageId(url);
-                if (!pageId) throw new Error('올바른 노션 링크를 입력해주세요.');
+                if (!pageId) throw new Error('Please enter a valid Notion link.');
                 const pageData = await notionFetchBlocks(pageId, signal);
                 const scriptText = blocksToText(pageData.results);
-                if (!scriptText) throw new Error('페이지 내용을 읽을 수 없어요. Integration이 페이지에 연결되어 있는지 확인하세요.');
+                if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
-                // 3. Claude 호출
-                setPGLoading('Claude가 FX 프롬프트 생성 중...');
+                // 3. Call Claude
+                setPGLoading('Claude is generating FX prompts...');
                 const response = await callClaude(systemPromptCache, scriptText, signal);
 
-                // 4. 파싱 & 렌더
+                // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
                 hidePGLoading();
                 renderPGCards();
-                // 버그7: 0개일 때 명확한 메시지
                 if (generatedPrompts.length === 0) {
-                    showPGError('FX 코멘트를 찾지 못했어요. 스크립트에 FX 태그가 있는지 확인해주세요.');
+                    showPGError('No FX comments found. Make sure the script has FX tags.');
                 } else {
-                    showToast(`${generatedPrompts.length}개 프롬프트 생성 완료!`);
+                    showToast(`${generatedPrompts.length} prompts generated!`);
                 }
 
             } catch (err) {
                 hidePGLoading();
                 if (err.name === 'AbortError') {
-                    showToast('생성이 취소됐어요.');
+                    showToast('Generation cancelled.');
                 } else {
-                    showPGError(`오류: ${err.message}`);
+                    showPGError(`Error: ${err.message}`);
                     console.error(err);
                 }
             } finally {
@@ -598,21 +596,21 @@
         document.getElementById('pg-select-all-btn').onclick = () => {
             const allOn = generatedPrompts.every(p => p.selected);
             generatedPrompts.forEach(p => p.selected = !allOn);
-            document.getElementById('pg-select-all-btn').textContent = allOn ? '전체 선택' : '전체 해제';
+            document.getElementById('pg-select-all-btn').textContent = allOn ? 'Select All' : 'Deselect All';
             renderPGCards();
         };
 
         document.getElementById('pg-generate-selected-btn').onclick = () => {
             const imgPrompts = generatedPrompts.filter(p => p.selected && p.type === 'image').map(p => p.prompt);
-            if (!imgPrompts.length) return showToast('선택된 이미지 항목이 없어요. 애니메이션은 복사 후 Higgsfield에서 사용하세요.');
+            if (!imgPrompts.length) return showToast('No image items selected. For animations, copy and use in Higgsfield.');
             runGenerationFromPrompts(imgPrompts);
         };
 
         async function runGenerationFromPrompt(prompt) { await runGenerationFromPrompts([prompt]); }
 
         async function runGenerationFromPrompts(prompts) {
-            if (isGenerating) return showToast('이미지 생성 중이에요. 잠시 기다려주세요.');
-            if (!geminiKey) return showToast('Gemini API 키가 필요해요.');
+            if (isGenerating) return showToast('Image generation in progress. Please wait.');
+            if (!geminiKey) return showToast('Gemini API key required.');
 
             isGenerating = true;
             currentAbortController = new AbortController();
@@ -628,12 +626,12 @@
                     modelLabel.textContent = 'Model: Nano Banana 2';
                     const b64 = await callGeminiAPI(prompts[i], refImages, signal);
                     if (b64) addResult(b64, slots[0][0]?.base64 || null);
-                    else throw new Error('이미지 데이터가 응답에 없어요.');
+                    else throw new Error('No image data in response.');
                 }
-                showToast(`${prompts.length}개 이미지 생성 완료!`);
+                showToast(`${prompts.length} image(s) generated!`);
             } catch (err) {
                 if (err.name !== 'AbortError') { showToast(err.message); console.error(err); }
-                else showToast('생성이 중단됐어요.');
+                else showToast('Generation stopped.');
             } finally {
                 isGenerating = false;
                 currentAbortController = null;
@@ -654,9 +652,9 @@
                     try { data = text ? JSON.parse(text) : {}; } catch(e) {}
                     if (res.ok) return data;
                     const msg = data.error?.message;
-                    if (res.status === 401 || res.status === 403) throw Object.assign(new Error(`인증 오류 (${res.status}): API 키를 확인하거나 결제 설정을 완료해주세요.`), { fatal: true });
-                    if (res.status === 429 || res.status >= 500) throw Object.assign(new Error(msg || `서버 오류 (${res.status})`), { retryable: true });
-                    throw Object.assign(new Error(msg || `요청 실패 (${res.status})`), { fatal: true });
+                    if (res.status === 401 || res.status === 403) throw Object.assign(new Error(`Auth error (${res.status}): Check your API key or billing settings.`), { fatal: true });
+                    if (res.status === 429 || res.status >= 500) throw Object.assign(new Error(msg || `Server error (${res.status})`), { retryable: true });
+                    throw Object.assign(new Error(msg || `Request failed (${res.status})`), { fatal: true });
                 } catch(err) {
                     if (err.name === 'AbortError') throw err;
                     if (err.fatal) throw err;
@@ -756,7 +754,7 @@
                 slots[slotIdx].push({ base64, url, mimeType: file.type || 'image/png' });
                 added++;
             }
-            if (added > 0) { renderSlot(slotIdx); showToast(`${added}개 이미지가 슬롯 ${slotIdx+1}에 추가됐어요.`); }
+            if (added > 0) { renderSlot(slotIdx); showToast(`${added} image(s) added to Slot ${slotIdx+1}.`); }
         }
 
         function toBase64(file) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(file); }); }
@@ -884,7 +882,7 @@
         // ── STANDARD GENERATION ──
         async function runGeneration(mode) {
             if (isGenerating) return;
-            if (!geminiKey) return showToast("API 키를 먼저 입력해주세요.");
+            if (!geminiKey) return showToast("Please enter your API key first.");
             const prompt = getFullPrompt();
             if (!prompt) return showToast("Please add some instructions/prompts.");
             isGenerating = true;
@@ -900,7 +898,7 @@
                         progressText.textContent = `Generating Image ${i+1}/${counts.single}...`;
                         const b64 = await callGeminiAPI(prompt, refImages, signal);
                         if (b64) addResult(b64, slots[0][0]?.base64 || null);
-                        else throw new Error("이미지 데이터가 응답에 포함되지 않았습니다.");
+                        else throw new Error("No image data in response.");
                     }
                 } else {
                     const styleRefs = [...slots[0], ...slots[1]];
@@ -921,7 +919,7 @@
                 }
             } catch(err) {
                 if (err.name !== 'AbortError') { console.error(err); showToast(err.message); }
-                else showToast("생성이 중단됐어요.");
+                else showToast("Generation stopped.");
             } finally {
                 isGenerating = false; currentAbortController = null;
                 controlDefault.classList.remove('hidden'); controlActive.classList.add('hidden');
@@ -945,7 +943,7 @@
             bulkActions.classList.add('hidden'); bulkActions.classList.remove('flex');
             document.getElementById('general-prompt').value = '';
             document.querySelectorAll('.prompt-cb').forEach(cb => cb.checked = false);
-            showToast('모든 데이터가 초기화됐어요.');
+            showToast('All data has been reset.');
         };
         window.updateCount = (type, val) => { counts[type] = Math.max(1, Math.min(10, counts[type] + val)); document.getElementById(`${type}-count`).textContent = counts[type]; };
 
