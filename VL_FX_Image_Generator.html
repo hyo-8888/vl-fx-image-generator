@@ -151,7 +151,10 @@
 
                 <section class="bg-gray-900 rounded-3xl p-6 border border-gray-800 shadow-xl flex flex-col gap-6">
                     <div>
-                        <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Preset Library</h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest">Preset Library</h3>
+                            <button id="preset-select-all-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition">Select All</button>
+                        </div>
                         <div id="saved-prompts-container" class="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-2"></div>
                     </div>
                     <div class="flex gap-2 pt-2">
@@ -491,11 +494,20 @@
             let m;
             while ((m = re.exec(text)) !== null) {
                 const type = m[1] === '🖼' ? 'image' : 'animation';
-                const context = m[3].trim();
+                const contextRaw = m[3].trim();
                 const raw = m[4];
+                // Extract source line if present
+                let source = '';
+                let context = contextRaw;
+                const sourceMatch = raw.match(/^>\s*source:\s*(.+?)[\n]/i) || raw.match(/^>\s*source:\s*(.+)$/im);
+                if (sourceMatch) source = sourceMatch[1].trim();
+                // Also check if source is on the line right after context (before the code block)
+                const preCode = raw.split(/```/)[0];
+                const srcLine = preCode.match(/>\s*source:\s*(.+)/i);
+                if (!source && srcLine) source = srcLine[1].trim();
                 const code = raw.match(/```[\w]*\n?([\s\S]*?)```/);
                 const prompt = code ? code[1].trim() : raw.trim();
-                if (prompt) prompts.push({ id: m[2], type, context, prompt, selected: type === 'image' });
+                if (prompt) prompts.push({ id: m[2], type, context, source, prompt, selected: type === 'image' });
             }
             if (prompts.length > 0) return prompts;
 
@@ -572,6 +584,14 @@
                 ctx.textContent = item.context;
 
                 meta.append(topRow, ctx);
+
+                if (item.source) {
+                    const src = document.createElement('p');
+                    src.className = 'text-[10px] text-gray-600 mt-0.5 truncate font-mono';
+                    src.title = item.source; // full text on hover
+                    src.textContent = '📋 ' + item.source;
+                    meta.append(src);
+                }
                 header.append(cb, meta);
 
                 const ta = document.createElement('textarea');
@@ -581,12 +601,33 @@
                 ta.oninput = () => { generatedPrompts[idx].prompt = ta.value; };
 
                 const actions = document.createElement('div');
-                actions.className = 'flex gap-2 mt-3';
+                actions.className = 'flex gap-2 mt-3 flex-wrap';
 
                 const copyBtn = document.createElement('button');
                 copyBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition';
                 copyBtn.textContent = 'Copy';
                 copyBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Copied!'); };
+
+                const regenBtn = document.createElement('button');
+                regenBtn.className = 'text-xs bg-purple-800 hover:bg-purple-700 text-purple-200 px-3 py-1.5 rounded-lg transition';
+                regenBtn.textContent = '↺ Regenerate';
+                regenBtn.onclick = async () => {
+                    regenBtn.textContent = '...';
+                    regenBtn.disabled = true;
+                    try {
+                        const regenSystem = systemPromptCache || '';
+                        const regenUser = `Rewrite only this single FX prompt. Keep the same subject and context, but generate a fresh version following the same style rules.\n\nOriginal context: ${item.context}\nCurrent prompt:\n${ta.value}\n\nReturn only the new prompt text, no explanation, no code block.`;
+                        const newPrompt = await callClaude(regenSystem, regenUser, null);
+                        ta.value = newPrompt.trim();
+                        generatedPrompts[idx].prompt = newPrompt.trim();
+                        showToast('Prompt regenerated!');
+                    } catch(e) {
+                        showToast('Regeneration failed: ' + e.message);
+                    } finally {
+                        regenBtn.textContent = '↺ Regenerate';
+                        regenBtn.disabled = false;
+                    }
+                };
 
                 const genBtn = document.createElement('button');
                 genBtn.className = 'text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded-lg transition';
@@ -599,7 +640,7 @@
                     genBtn.onclick = () => runGenerationFromPrompt(item.prompt);
                 }
 
-                actions.append(copyBtn, genBtn);
+                actions.append(copyBtn, regenBtn, genBtn);
                 card.append(header, ta, actions);
                 cards.appendChild(card);
             });
@@ -625,24 +666,30 @@
             const signal = pgAbortController.signal;
 
             try {
-                // 1. Load style guide from Notion (cached after first load)
-                if (!systemPromptCache) {
-                    setPGLoading('Loading style guide...');
-                    const sgData = await notionFetchBlocks(STYLE_GUIDE_PAGE_ID, signal);
-                    systemPromptCache = blocksToRichText(sgData.results);
-                }
-
-                // 2. Load script page + inline FX comments
-                setPGLoading('Reading script page and FX comments...');
                 const pageId = extractPageId(url);
                 if (!pageId) throw new Error('Please enter a valid Notion link.');
-                const pageData = await notionFetchBlocks(pageId, signal);
+
+                setPGLoading('Loading style guide and script simultaneously...');
+
+                // 1. Fetch style guide + script page in parallel
+                const [sgData, pageData] = await Promise.all([
+                    systemPromptCache
+                        ? Promise.resolve(null)  // already cached, skip
+                        : notionFetchBlocksRaw(STYLE_GUIDE_PAGE_ID, signal),  // no comments needed
+                    notionFetchBlocks(pageId, signal)  // script + comments
+                ]);
+
+                if (!systemPromptCache) {
+                    systemPromptCache = blocksToRichText(sgData);
+                }
+
                 const scriptText = blocksToRichText(pageData.results);
                 if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
-                // 3. Call Claude
+                // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
-                const response = await callClaude(systemPromptCache, scriptText, signal);
+                const scriptWithInstructions = scriptText + `\n\n---\nIMPORTANT: For each asset, include a "source:" line right after the context line (>) that shows the exact original FX comment text from the script (the [FX COMMENT] line that triggered this asset). Format:\n> [context line]\n> source: [exact FX COMMENT text here]\n`;
+                const response = await callClaude(systemPromptCache, scriptWithInstructions, signal);
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
@@ -917,9 +964,17 @@
         let savedPrompts = JSON.parse(localStorage.getItem('savedPrompts') || 'null') || defaultPrompts;
         if (!localStorage.getItem('savedPrompts')) localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
 
+        function getPresetCheckedState() {
+            return JSON.parse(localStorage.getItem('presetCheckedState') || '{}');
+        }
+        function savePresetCheckedState(state) {
+            localStorage.setItem('presetCheckedState', JSON.stringify(state));
+        }
+
         function renderPrompts() {
             const container = document.getElementById('saved-prompts-container');
             container.innerHTML = '';
+            const checkedState = getPresetCheckedState();
             savedPrompts.forEach((p, i) => {
                 const row = document.createElement('div');
                 row.className = 'flex items-center gap-2 group';
@@ -927,6 +982,13 @@
                 label.className = 'flex-grow flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 p-2 rounded-xl cursor-pointer border border-transparent hover:border-gray-700 transition';
                 const cb = document.createElement('input');
                 cb.type = 'checkbox'; cb.className = 'prompt-cb rounded bg-gray-900 border-gray-700 text-amber-500 flex-shrink-0'; cb.dataset.promptIndex = i;
+                cb.checked = !!checkedState[p];
+                cb.onchange = () => {
+                    const state = getPresetCheckedState();
+                    if (cb.checked) state[p] = true; else delete state[p];
+                    savePresetCheckedState(state);
+                    updatePresetSelectAllBtn();
+                };
                 const text = document.createElement('span');
                 text.className = 'text-xs text-gray-300 truncate'; text.textContent = p;
                 label.append(cb, text);
@@ -936,9 +998,39 @@
                 row.append(label, delBtn);
                 container.appendChild(row);
             });
+            updatePresetSelectAllBtn();
         }
 
-        function removePrompt(i) { savedPrompts.splice(i, 1); localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts)); renderPrompts(); }
+        function updatePresetSelectAllBtn() {
+            const btn = document.getElementById('preset-select-all-btn');
+            if (!btn) return;
+            const all = document.querySelectorAll('.prompt-cb');
+            const checked = document.querySelectorAll('.prompt-cb:checked');
+            btn.textContent = (all.length > 0 && checked.length === all.length) ? 'Deselect All' : 'Select All';
+        }
+
+        document.getElementById('preset-select-all-btn').onclick = () => {
+            const all = document.querySelectorAll('.prompt-cb');
+            const checked = document.querySelectorAll('.prompt-cb:checked');
+            const shouldCheck = !(all.length > 0 && checked.length === all.length);
+            const state = {};
+            all.forEach(cb => {
+                cb.checked = shouldCheck;
+                if (shouldCheck) state[savedPrompts[parseInt(cb.dataset.promptIndex)]] = true;
+            });
+            savePresetCheckedState(state);
+            updatePresetSelectAllBtn();
+        };
+
+        function removePrompt(i) {
+            const removed = savedPrompts[i];
+            savedPrompts.splice(i, 1);
+            localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
+            const state = getPresetCheckedState();
+            delete state[removed];
+            savePresetCheckedState(state);
+            renderPrompts();
+        }
 
         document.getElementById('add-prompt-btn').onclick = () => {
             const inp = document.getElementById('new-prompt-input');
