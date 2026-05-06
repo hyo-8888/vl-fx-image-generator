@@ -516,8 +516,12 @@
                 return shared.slice(0, 3).join('_') || 'scene';
             }
 
-            const allTokens = prompts.map(p => tokenize(p.context));
-            const allNames = prompts.map(p => extractNames(p.context));
+            // Use source (actual FX description) if context is generic (e.g. "Prompt 1")
+            const getText = p => (p.source && p.source.length > 10) ? p.source : p.context;
+            const allTokens = prompts.map(p => tokenize(getText(p)));
+            const allNames = prompts.map(p => extractNames(getText(p)));
+            // Skip entirely if all token sets are too small (no meaningful text)
+            if (allTokens.every(t => t.length < 3)) return;
             let groupCounter = 0;
             let anchorIdx = null; // first item index of current group
 
