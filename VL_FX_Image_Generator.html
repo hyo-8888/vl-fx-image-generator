@@ -700,8 +700,7 @@
 
                 // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
-                const scriptWithRules = scriptText + `\n\n---\nADDITIONAL RULE: If an [FX COMMENT] contains only emoji with no text description inside <angle brackets>, skip it entirely — do not generate a prompt for it.`;
-                const response = await callClaude(systemPromptCache, scriptWithRules, signal);
+                const response = await callClaude(systemPromptCache, scriptText, signal);
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
