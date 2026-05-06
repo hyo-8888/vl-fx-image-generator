@@ -482,17 +482,24 @@
         function detectSceneGroups(prompts) {
             if (prompts.length < 2) return;
 
-            // Tokenize context into meaningful words (3+ chars, lowercase)
             function tokenize(text) {
                 return text.toLowerCase()
-                    .replace(/<[^>]*>/g, ' ')          // strip angle-bracket tags
-                    .replace(/\[.*?\]/g, ' ')          // strip [Image] etc
-                    .replace(/[^a-z0-9가-힣\s]/g, ' ') // keep letters, numbers, korean
+                    .replace(/<[^>]*>/g, ' ')
+                    .replace(/\[.*?\]/g, ' ')
+                    .replace(/[^a-z0-9가-힣\s]/g, ' ')
                     .split(/\s+/)
                     .filter(w => w.length > 2);
             }
 
-            // Jaccard similarity between two word arrays
+            // Extract proper nouns (capitalized words = likely character/place names)
+            function extractNames(text) {
+                const cleaned = text.replace(/\[.*?\]/g, '').replace(/<[^>]*>/g, '');
+                const stopWords = new Set(['the','this','that','with','from','have','for','not','are','but','its','has']);
+                const names = (cleaned.match(/\b[A-Z][a-z]{2,}\b/g) || [])
+                    .filter(n => !stopWords.has(n.toLowerCase()));
+                return [...new Set(names.map(n => n.toLowerCase()))];
+            }
+
             function similarity(a, b) {
                 const setA = new Set(a), setB = new Set(b);
                 const intersection = [...setA].filter(x => setB.has(x)).length;
@@ -500,26 +507,40 @@
                 return union > 0 ? intersection / union : 0;
             }
 
-            // Generate a readable label from shared words between first two items
+            function sharesName(namesA, namesB) {
+                return namesA.some(n => namesB.includes(n));
+            }
+
             function makeLabel(tokensA, tokensB) {
                 const shared = tokensA.filter(w => tokensB.includes(w));
-                const label = shared.slice(0, 3).join('_');
-                return label || 'scene';
+                return shared.slice(0, 3).join('_') || 'scene';
             }
 
             const allTokens = prompts.map(p => tokenize(p.context));
+            const allNames = prompts.map(p => extractNames(p.context));
             let groupCounter = 0;
+            let anchorIdx = null; // first item index of current group
 
             for (let i = 1; i < prompts.length; i++) {
-                const sim = similarity(allTokens[i], allTokens[i - 1]);
-                if (sim >= 0.25) {
-                    // Consecutive items are similar → same scene group
+                // Compare to both previous item AND group anchor (if in a group)
+                const prevSim = similarity(allTokens[i], allTokens[i - 1]);
+                const anchorSim = anchorIdx !== null ? similarity(allTokens[i], allTokens[anchorIdx]) : 0;
+                const bestSim = Math.max(prevSim, anchorSim);
+                // Lower threshold if they share a character/place name
+                const nameMatch = sharesName(allNames[i], allNames[i - 1]) ||
+                                  (anchorIdx !== null && sharesName(allNames[i], allNames[anchorIdx]));
+                const threshold = nameMatch ? 0.12 : 0.25;
+
+                if (bestSim >= threshold) {
                     if (!prompts[i - 1].sceneGroup) {
                         groupCounter++;
+                        anchorIdx = i - 1;
                         const label = makeLabel(allTokens[i - 1], allTokens[i]) || `scene_${groupCounter}`;
                         prompts[i - 1].sceneGroup = label;
                     }
                     prompts[i].sceneGroup = prompts[i - 1].sceneGroup;
+                } else {
+                    anchorIdx = null;
                 }
             }
         }
@@ -558,13 +579,9 @@
                 const preCode = raw.split(/```/)[0];
                 const srcLine = preCode.match(/>\s*source:\s*(.+)/i);
                 if (!source && srcLine) source = srcLine[1].trim();
-                // Extract scene_group anywhere in the block (inside or outside code block)
-                let sceneGroup = '';
-                const sgMatch = raw.match(/scene_group:\s*([^\n`]+)/i) || contextRaw.match(/scene_group:\s*([^\n`]+)/i);
-                if (sgMatch) sceneGroup = sgMatch[1].trim();
                 const code = raw.match(/```[\w]*\n?([\s\S]*?)```/);
-                const prompt = code ? code[1].trim() : raw.replace(/scene_group:[^\n]+/gi, '').trim();
-                if (prompt) prompts.push({ id: m[2], type, context, source, sceneGroup, prompt, selected: type === 'image' });
+                const prompt = code ? code[1].trim() : raw.trim();
+                if (prompt) prompts.push({ id: m[2], type, context, source, sceneGroup: '', prompt, selected: type === 'image' });
             }
             if (prompts.length > 0) return prompts;
 
@@ -759,26 +776,27 @@
                 }
 
                 const scriptText = blocksToRichText(pageData.results);
-                window._debugScriptText = scriptText; // debug
+
                 if (!scriptText) throw new Error('Could not read page content. Make sure the Integration is connected to this page.');
 
                 // Extract all [FX COMMENT] lines from scriptText for display
                 const fxCommentLines = scriptText.split('\n')
                     .filter(l => l.startsWith('[FX COMMENT]'))
                     .map(l => l.replace('[FX COMMENT]', '').trim());
-                window._debugFxCommentLines = fxCommentLines; // debug
+
 
                 // 2. Call Claude — prompt generation only (no scene_group here)
                 setPGLoading('Claude is generating FX prompts...');
                 const response = await callClaude(systemPromptCache, scriptText, signal);
-                window._debugClaudeResponse = response; // debug
+
 
                 // 3. Parse prompts
                 generatedPrompts = parseClaudeResponse(response);
                 const refIsolation = 'Use the reference images for rendering style, lighting, and color palette only — do not copy any specific character\'s face, hair, outfit, or pose from the references. Generate a completely new character based on the description above.';
+                const hasRefImages = slots[0].length > 0 || slots[1].length > 0;
                 generatedPrompts.forEach((p, i) => {
                     if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i];
-                    if (p.type === 'image') p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
+                    if (p.type === 'image' && hasRefImages) p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
                 });
 
                 // 4. Render cards immediately so user sees prompts fast
@@ -898,8 +916,11 @@
                 slot2Images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
             }
 
-            // Fallback: if called with combined images (batch mode), add without label
-            if (slot1Images.length === 0 && slot2Images.length === 0) {
+            // Add target/batch images (Slot 3 in batch mode, or combined in fallback)
+            if (images.length > 0) {
+                if (slot1Images.length > 0 || slot2Images.length > 0) {
+                    parts.push({ text: '[Target image to transform:]' });
+                }
                 images.forEach(img => parts.push({ inlineData: { mimeType: img.mimeType || 'image/png', data: img.base64 } }));
             }
 
