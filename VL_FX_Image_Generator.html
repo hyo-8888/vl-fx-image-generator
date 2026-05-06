@@ -478,6 +478,38 @@
             return d.content[0].text;
         }
 
+        // ── SCENE GROUP ANALYSIS (2nd pass) ──
+        async function analyzeSceneGroups(prompts, signal) {
+            if (prompts.length < 2) return;
+            const contexts = prompts.map(p => `#${p.id} [${p.type}]: ${p.context}`).join('\n');
+            const groupPrompt = `Below are FX asset descriptions extracted from a video lesson script. Some consecutive assets depict the same character, location, or subject in slightly different situations (like frames of an animation sequence). Identify which assets belong together as a scene group.
+
+Assets:
+${contexts}
+
+Return ONLY a valid JSON object mapping descriptive snake_case group labels to arrays of asset ID strings. Only include assets that are part of a group (2 or more related consecutive assets). If no groups exist, return {}.
+Example: {"audrey_cafe": ["1", "2", "3"], "park_scene": ["5", "6"]}`;
+            try {
+                const response = await callClaude(
+                    'You are a JSON-only response bot. Analyze the asset list and return ONLY valid JSON — no explanation, no markdown, no code fences.',
+                    groupPrompt,
+                    signal
+                );
+                const jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) return;
+                const groups = JSON.parse(jsonMatch[0]);
+                for (const [groupName, ids] of Object.entries(groups)) {
+                    if (!Array.isArray(ids)) continue;
+                    ids.forEach(id => {
+                        const p = prompts.find(pr => String(pr.id) === String(id));
+                        if (p) p.sceneGroup = groupName;
+                    });
+                }
+            } catch (e) {
+                console.warn('Scene group analysis skipped:', e.message);
+            }
+        }
+
         // ── PROMPT GENERATOR ──
         function setPGLoading(msg) {
             const el = document.getElementById('pg-loading');
@@ -722,26 +754,35 @@
                     .map(l => l.replace('[FX COMMENT]', '').trim());
                 window._debugFxCommentLines = fxCommentLines; // debug
 
-                // 2. Call Claude
+                // 2. Call Claude — prompt generation only (no scene_group here)
                 setPGLoading('Claude is generating FX prompts...');
-                const sceneGroupInstruction = `\n\n---\nADDITIONAL INSTRUCTION: After each prompt's context line (the line starting with >), add a scene_group tag if this asset belongs to a series of consecutive assets showing the same character/location/subject in slightly different situations. Use a short snake_case label (e.g. scene_group: audrey_cafe, scene_group: park_scene). If it's a standalone asset with no continuity, omit the scene_group line. Format:\n> [context line]\n> scene_group: label_here\n\nThis helps the user understand which assets need visual consistency.\n---`;
-                const response = await callClaude(systemPromptCache, scriptText + sceneGroupInstruction, signal);
-                window._debugClaudeResponse = response; // debug: check in console
+                const response = await callClaude(systemPromptCache, scriptText, signal);
+                window._debugClaudeResponse = response; // debug
 
-                // 4. Parse & render
+                // 3. Parse prompts
                 generatedPrompts = parseClaudeResponse(response);
-                // Attach FX comment source + append ref-isolation clause to each image prompt
                 const refIsolation = 'Use the reference images for rendering style, lighting, and color palette only — do not copy any specific character\'s face, hair, outfit, or pose from the references. Generate a completely new character based on the description above.';
                 generatedPrompts.forEach((p, i) => {
                     if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i];
                     if (p.type === 'image') p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
                 });
+
+                // 4. Render cards immediately so user sees prompts fast
                 hidePGLoading();
                 renderPGCards();
                 if (generatedPrompts.length === 0) {
                     showPGError('No FX comments found. Make sure the script has FX tags.');
                 } else {
-                    showToast(`${generatedPrompts.length} prompts generated!`);
+                    showToast(`${generatedPrompts.length} prompts generated! Analyzing scene groups...`);
+                    // 5. Scene group analysis — separate Claude call (non-blocking for UI)
+                    try {
+                        await analyzeSceneGroups(generatedPrompts, signal);
+                        renderPGCards(); // re-render with scene group badges
+                        const groupCount = new Set(generatedPrompts.map(p => p.sceneGroup).filter(Boolean)).size;
+                        if (groupCount > 0) showToast(`${groupCount} scene group(s) detected!`);
+                    } catch (e) {
+                        console.warn('Scene group analysis skipped');
+                    }
                 }
 
             } catch (err) {
