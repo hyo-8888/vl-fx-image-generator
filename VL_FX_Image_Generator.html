@@ -704,11 +704,11 @@
                 const [sgData, pageData] = await Promise.all([
                     systemPromptCache
                         ? Promise.resolve(null)  // already cached, skip
-                        : notionFetchBlocksRaw(STYLE_GUIDE_PAGE_ID, signal),  // no comments needed
+                        : notionFetchBlocksRaw(STYLE_GUIDE_PAGE_ID, signal).catch(() => null),  // fail gracefully
                     notionFetchBlocks(pageId, signal)  // script + comments
                 ]);
 
-                if (!systemPromptCache) {
+                if (!systemPromptCache && sgData) {
                     systemPromptCache = blocksToRichText(sgData);
                 }
 
@@ -726,6 +726,7 @@
                 setPGLoading('Claude is generating FX prompts...');
                 const sceneGroupInstruction = `\n\n---\nADDITIONAL INSTRUCTION: After each prompt's context line (the line starting with >), add a scene_group tag if this asset belongs to a series of consecutive assets showing the same character/location/subject in slightly different situations. Use a short snake_case label (e.g. scene_group: audrey_cafe, scene_group: park_scene). If it's a standalone asset with no continuity, omit the scene_group line. Format:\n> [context line]\n> scene_group: label_here\n\nThis helps the user understand which assets need visual consistency.\n---`;
                 const response = await callClaude(systemPromptCache, scriptText + sceneGroupInstruction, signal);
+                window._debugClaudeResponse = response; // debug: check in console
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
