@@ -478,35 +478,49 @@
             return d.content[0].text;
         }
 
-        // ── SCENE GROUP ANALYSIS (2nd pass) ──
-        async function analyzeSceneGroups(prompts, signal) {
+        // ── SCENE GROUP DETECTION (client-side, no extra API call) ──
+        function detectSceneGroups(prompts) {
             if (prompts.length < 2) return;
-            const contexts = prompts.map(p => `#${p.id} [${p.type}]: ${p.context}`).join('\n');
-            const groupPrompt = `Below are FX asset descriptions extracted from a video lesson script. Some consecutive assets depict the same character, location, or subject in slightly different situations (like frames of an animation sequence). Identify which assets belong together as a scene group.
 
-Assets:
-${contexts}
+            // Tokenize context into meaningful words (3+ chars, lowercase)
+            function tokenize(text) {
+                return text.toLowerCase()
+                    .replace(/<[^>]*>/g, ' ')          // strip angle-bracket tags
+                    .replace(/\[.*?\]/g, ' ')          // strip [Image] etc
+                    .replace(/[^a-z0-9가-힣\s]/g, ' ') // keep letters, numbers, korean
+                    .split(/\s+/)
+                    .filter(w => w.length > 2);
+            }
 
-Return ONLY a valid JSON object mapping descriptive snake_case group labels to arrays of asset ID strings. Only include assets that are part of a group (2 or more related consecutive assets). If no groups exist, return {}.
-Example: {"audrey_cafe": ["1", "2", "3"], "park_scene": ["5", "6"]}`;
-            try {
-                const response = await callClaude(
-                    'You are a JSON-only response bot. Analyze the asset list and return ONLY valid JSON — no explanation, no markdown, no code fences.',
-                    groupPrompt,
-                    signal
-                );
-                const jsonMatch = response.match(/\{[\s\S]*\}/);
-                if (!jsonMatch) return;
-                const groups = JSON.parse(jsonMatch[0]);
-                for (const [groupName, ids] of Object.entries(groups)) {
-                    if (!Array.isArray(ids)) continue;
-                    ids.forEach(id => {
-                        const p = prompts.find(pr => String(pr.id) === String(id));
-                        if (p) p.sceneGroup = groupName;
-                    });
+            // Jaccard similarity between two word arrays
+            function similarity(a, b) {
+                const setA = new Set(a), setB = new Set(b);
+                const intersection = [...setA].filter(x => setB.has(x)).length;
+                const union = new Set([...setA, ...setB]).size;
+                return union > 0 ? intersection / union : 0;
+            }
+
+            // Generate a readable label from shared words between first two items
+            function makeLabel(tokensA, tokensB) {
+                const shared = tokensA.filter(w => tokensB.includes(w));
+                const label = shared.slice(0, 3).join('_');
+                return label || 'scene';
+            }
+
+            const allTokens = prompts.map(p => tokenize(p.context));
+            let groupCounter = 0;
+
+            for (let i = 1; i < prompts.length; i++) {
+                const sim = similarity(allTokens[i], allTokens[i - 1]);
+                if (sim >= 0.25) {
+                    // Consecutive items are similar → same scene group
+                    if (!prompts[i - 1].sceneGroup) {
+                        groupCounter++;
+                        const label = makeLabel(allTokens[i - 1], allTokens[i]) || `scene_${groupCounter}`;
+                        prompts[i - 1].sceneGroup = label;
+                    }
+                    prompts[i].sceneGroup = prompts[i - 1].sceneGroup;
                 }
-            } catch (e) {
-                console.warn('Scene group analysis skipped:', e.message);
             }
         }
 
@@ -773,15 +787,14 @@ Example: {"audrey_cafe": ["1", "2", "3"], "park_scene": ["5", "6"]}`;
                 if (generatedPrompts.length === 0) {
                     showPGError('No FX comments found. Make sure the script has FX tags.');
                 } else {
-                    showToast(`${generatedPrompts.length} prompts generated! Analyzing scene groups...`);
-                    // 5. Scene group analysis — separate Claude call (non-blocking for UI)
-                    try {
-                        await analyzeSceneGroups(generatedPrompts, signal);
-                        renderPGCards(); // re-render with scene group badges
-                        const groupCount = new Set(generatedPrompts.map(p => p.sceneGroup).filter(Boolean)).size;
-                        if (groupCount > 0) showToast(`${groupCount} scene group(s) detected!`);
-                    } catch (e) {
-                        console.warn('Scene group analysis skipped');
+                    // 5. Detect scene groups (client-side, instant)
+                    detectSceneGroups(generatedPrompts);
+                    renderPGCards(); // re-render with scene group badges
+                    const groupCount = new Set(generatedPrompts.map(p => p.sceneGroup).filter(Boolean)).size;
+                    if (groupCount > 0) {
+                        showToast(`${generatedPrompts.length} prompts generated! ${groupCount} scene group(s) detected`);
+                    } else {
+                        showToast(`${generatedPrompts.length} prompts generated!`);
                     }
                 }
 
