@@ -439,11 +439,18 @@
                 }
                 else if (c?.rich_text) text += rt(c.rich_text) + '\n';
 
-                // Append inline comments on this block
+                // Append inline comments — only [Image] and [Animation] tags
                 if (b._comments && b._comments.length > 0) {
                     for (const comment of b._comments) {
-                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('').replace(/\n/g, ' ').trim();
-                        if (commentText) text += `[FX COMMENT] ${commentText}\n`;
+                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
+                        // Extract only [Image], [Animated Image], and [Animation] sections from the comment
+                        const fxMatches = commentText.match(/\[(Animated Image|Image|Animation)\][^\[]+/gi);
+                        if (fxMatches) {
+                            for (const match of fxMatches) {
+                                const cleaned = match.replace(/\n/g, ' ').trim();
+                                text += `[FX COMMENT] ${cleaned}\n`;
+                            }
+                        }
                     }
                 }
 
@@ -505,9 +512,13 @@
                 const preCode = raw.split(/```/)[0];
                 const srcLine = preCode.match(/>\s*source:\s*(.+)/i);
                 if (!source && srcLine) source = srcLine[1].trim();
+                // Extract scene_group if present
+                let sceneGroup = '';
+                const sgMatch = raw.match(/>\s*scene_group:\s*(.+)/i) || contextRaw.match(/scene_group:\s*(.+)/i);
+                if (sgMatch) sceneGroup = sgMatch[1].trim();
                 const code = raw.match(/```[\w]*\n?([\s\S]*?)```/);
                 const prompt = code ? code[1].trim() : raw.trim();
-                if (prompt) prompts.push({ id: m[2], type, context, source, prompt, selected: type === 'image' });
+                if (prompt) prompts.push({ id: m[2], type, context, source, sceneGroup, prompt, selected: type === 'image' });
             }
             if (prompts.length > 0) return prompts;
 
@@ -578,6 +589,19 @@
                 num.textContent = `#${item.id}`;
 
                 topRow.append(badge, num);
+
+                // Scene group badge
+                if (item.sceneGroup) {
+                    // Assign consistent color per group
+                    const groupColors = ['bg-teal-900/50 text-teal-300', 'bg-pink-900/50 text-pink-300', 'bg-indigo-900/50 text-indigo-300', 'bg-orange-900/50 text-orange-300', 'bg-green-900/50 text-green-300'];
+                    const allGroups = [...new Set(generatedPrompts.map(p => p.sceneGroup).filter(Boolean))];
+                    const colorIdx = allGroups.indexOf(item.sceneGroup) % groupColors.length;
+                    const sgBadge = document.createElement('span');
+                    sgBadge.className = `text-[10px] font-semibold px-2 py-0.5 rounded-full ${groupColors[colorIdx]}`;
+                    sgBadge.title = 'These assets share the same scene/character — generate consistently';
+                    sgBadge.textContent = '🔗 ' + item.sceneGroup.replace(/_/g, ' ');
+                    topRow.append(sgBadge);
+                }
 
                 const ctx = document.createElement('p');
                 ctx.className = 'text-xs text-gray-400 italic truncate';
@@ -700,7 +724,8 @@
 
                 // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
-                const response = await callClaude(systemPromptCache, scriptText, signal);
+                const sceneGroupInstruction = `\n\n---\nADDITIONAL INSTRUCTION: After each prompt's context line (the line starting with >), add a scene_group tag if this asset belongs to a series of consecutive assets showing the same character/location/subject in slightly different situations. Use a short snake_case label (e.g. scene_group: audrey_cafe, scene_group: park_scene). If it's a standalone asset with no continuity, omit the scene_group line. Format:\n> [context line]\n> scene_group: label_here\n\nThis helps the user understand which assets need visual consistency.\n---`;
+                const response = await callClaude(systemPromptCache, scriptText + sceneGroupInstruction, signal);
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
