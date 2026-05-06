@@ -497,7 +497,8 @@
         function parseClaudeResponse(text) {
             const prompts = [];
             // 1st: emoji-based parsing (🖼/🎬)
-            const re = /(🖼|🎬)\s+\*\*#(\d+)[^*]*\*\*[^\n]*\n>(.*?)\n+([\s\S]*?)(?=\n---|\n🖼|\n🎬|$)/g;
+            // Capture everything up to next emoji header or end
+            const re = /(🖼|🎬)\s+\*\*#(\d+)[^*]*\*\*[^\n]*\n>(.*?)\n+([\s\S]*?)(?=\n(?:🖼|🎬)\s+\*\*#|\n---\n(?:🖼|🎬)|$)/g;
             let m;
             while ((m = re.exec(text)) !== null) {
                 const type = m[1] === '🖼' ? 'image' : 'animation';
@@ -508,16 +509,15 @@
                 let context = contextRaw;
                 const sourceMatch = raw.match(/^>\s*source:\s*(.+?)[\n]/i) || raw.match(/^>\s*source:\s*(.+)$/im);
                 if (sourceMatch) source = sourceMatch[1].trim();
-                // Also check if source is on the line right after context (before the code block)
                 const preCode = raw.split(/```/)[0];
                 const srcLine = preCode.match(/>\s*source:\s*(.+)/i);
                 if (!source && srcLine) source = srcLine[1].trim();
-                // Extract scene_group if present
+                // Extract scene_group anywhere in the block (inside or outside code block)
                 let sceneGroup = '';
-                const sgMatch = raw.match(/>\s*scene_group:\s*(.+)/i) || contextRaw.match(/scene_group:\s*(.+)/i);
+                const sgMatch = raw.match(/scene_group:\s*([^\n`]+)/i) || contextRaw.match(/scene_group:\s*([^\n`]+)/i);
                 if (sgMatch) sceneGroup = sgMatch[1].trim();
                 const code = raw.match(/```[\w]*\n?([\s\S]*?)```/);
-                const prompt = code ? code[1].trim() : raw.trim();
+                const prompt = code ? code[1].trim() : raw.replace(/scene_group:[^\n]+/gi, '').trim();
                 if (prompt) prompts.push({ id: m[2], type, context, source, sceneGroup, prompt, selected: type === 'image' });
             }
             if (prompts.length > 0) return prompts;
