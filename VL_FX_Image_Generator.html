@@ -484,16 +484,15 @@
 
             function tokenize(text) {
                 return text.toLowerCase()
-                    .replace(/<[^>]*>/g, ' ')
-                    .replace(/\[.*?\]/g, ' ')
-                    .replace(/[^a-z0-9가-힣\s]/g, ' ')
+                    .replace(/\[.*?\]/g, ' ')          // strip [Image] etc
+                    .replace(/[^a-z0-9가-힣\s]/g, ' ')  // keep letters, numbers, korean (also strips < > ☕ etc)
                     .split(/\s+/)
                     .filter(w => w.length > 2);
             }
 
             // Extract proper nouns (capitalized words = likely character/place names)
             function extractNames(text) {
-                const cleaned = text.replace(/\[.*?\]/g, '').replace(/<[^>]*>/g, '');
+                const cleaned = text.replace(/\[.*?\]/g, '').replace(/[<>]/g, ' ');
                 const stopWords = new Set(['the','this','that','with','from','have','for','not','are','but','its','has']);
                 const names = (cleaned.match(/\b[A-Z][a-z]{2,}\b/g) || [])
                     .filter(n => !stopWords.has(n.toLowerCase()));
