@@ -632,12 +632,17 @@
                 const genBtn = document.createElement('button');
                 genBtn.className = 'text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded-lg transition';
                 genBtn.textContent = 'Generate with this prompt';
+                genBtn.onclick = () => runGenerationFromPrompt(ta.value);
+
                 if (item.type === 'animation') {
-                    genBtn.textContent = 'For Higgsfield (copy only)';
-                    genBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
-                    genBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Higgsfield prompt copied!'); };
-                } else {
-                    genBtn.onclick = () => runGenerationFromPrompt(item.prompt);
+                    const copyHigsBtn = document.createElement('button');
+                    copyHigsBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
+                    copyHigsBtn.textContent = '📋 Copy for Higgsfield';
+                    copyHigsBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Higgsfield prompt copied!'); };
+                    actions.append(copyBtn, regenBtn, genBtn, copyHigsBtn);
+                    card.append(header, ta, actions);
+                    cards.appendChild(card);
+                    return;
                 }
 
                 actions.append(copyBtn, regenBtn, genBtn);
@@ -695,7 +700,8 @@
 
                 // 2. Call Claude
                 setPGLoading('Claude is generating FX prompts...');
-                const response = await callClaude(systemPromptCache, scriptText, signal);
+                const scriptWithRules = scriptText + `\n\n---\nADDITIONAL RULE: If an [FX COMMENT] contains only emoji with no text description inside <angle brackets>, skip it entirely — do not generate a prompt for it.`;
+                const response = await callClaude(systemPromptCache, scriptWithRules, signal);
 
                 // 4. Parse & render
                 generatedPrompts = parseClaudeResponse(response);
