@@ -443,8 +443,8 @@
                 if (b._comments && b._comments.length > 0) {
                     for (const comment of b._comments) {
                         const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
-                        // Extract only [Image], [Animated Image], and [Animation] sections from the comment
-                        const fxMatches = commentText.match(/\[(Animated Image|Image|Animation)\][^\[]+/gi);
+                        // Extract [Image...], [Animated Image...], and [Animation...] sections (supports tags like [Image - must-have])
+                        const fxMatches = commentText.match(/\[(Animated Image|Image|Animation)[^\]]*\][^\[]+/gi);
                         if (fxMatches) {
                             for (const match of fxMatches) {
                                 const cleaned = match.replace(/\n/g, ' ').trim();
