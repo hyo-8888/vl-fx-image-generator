@@ -105,6 +105,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
                     Generate Prompts
                 </button>
+                <button id="refresh-rules-btn" title="Re-fetch the style guide from Notion (use after the guide was edited)" class="bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs px-3 py-3 rounded-xl transition whitespace-nowrap">↻ Rules</button>
             </div>
             <!-- Loading -->
             <div id="pg-loading" class="hidden items-center gap-3 text-sm text-purple-300 mb-4">
@@ -274,7 +275,8 @@
     <script>
         // ── CONFIG ──
         const GEMINI_MODEL = "gemini-3.1-flash-image-preview";
-        const CLAUDE_MODEL = "claude-sonnet-4-5";
+        const CLAUDE_MODEL = "claude-sonnet-5";   // model pin — update here only
+        const CLAUDE_MAX_TOKENS = 16384;          // long lessons need headroom; truncation is detected via stop_reason
         const NOTION_PROXY_URL = "https://notion-proxy.hyo-047.workers.dev";
 
         const STYLE_GUIDE_PAGE_ID = "352792ec2f10816b9ba9efa7954479d5";
@@ -329,13 +331,31 @@
         // ── TOAST ──
         const toast = document.getElementById('toast');
         const toastMsg = document.getElementById('toast-msg');
-        function showToast(msg) {
+        function showToast(msg, duration = 3000) {
             if (toastTimer) clearTimeout(toastTimer);
             toastMsg.textContent = msg;
             toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-100 translate-y-0';
             toastTimer = setTimeout(() => {
                 toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] transition-all duration-300 opacity-0 translate-y-10 pointer-events-none';
-            }, 3000);
+            }, duration);
+        }
+
+        // ── FRIENDLY API ERRORS ──
+        // Users aren't developers: when credits run out or a key expires, tell them
+        // exactly what happened and who to contact — not a raw API error.
+        const CONTACT = 'Please message Hyo';
+        function friendlyApiError(status, rawMsg, provider) {
+            const m = (rawMsg || '').toLowerCase();
+            if (m.includes('credit') || m.includes('quota') || m.includes('billing') || m.includes('exceeded') || status === 402) {
+                return Object.assign(new Error(`💳 ${provider} credits have run out — nothing is wrong on your side. ${CONTACT} to recharge, then try again.`), { fatal: true, credit: true });
+            }
+            if (status === 401 || status === 403) {
+                return Object.assign(new Error(`🔑 ${provider} API key problem (invalid or expired). ${CONTACT}.`), { fatal: true });
+            }
+            if (m.includes('not found') && m.includes('model')) {
+                return Object.assign(new Error(`⚙️ The pinned ${provider} model may have been retired. ${CONTACT} to update the tool.`), { fatal: true });
+            }
+            return null; // not a recognized fatal case
         }
 
         // ── NOTION API ──
@@ -412,6 +432,36 @@
             return text.trim();
         }
 
+        // Emit [FX COMMENT FXC-###] lines for one block's comments.
+        // Forwards the FULL text of any comment carrying a bracket tag (any variant:
+        // [Image], [Image - must-have], [Image + text], [Speech Bubble]...) or an emoji.
+        // The style-guide system prompt decides what actually needs an asset.
+        function fxCommentLinesFor(b) {
+            let out = '';
+            if (b._comments && b._comments.length > 0) {
+                for (const comment of b._comments) {
+                    const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
+                    const hasTag = /\[[^\]]+\]/.test(commentText);
+                    const hasEmoji = /\p{Extended_Pictographic}/u.test(commentText);
+                    if (hasTag || hasEmoji) {
+                        window._fxSeq = (window._fxSeq || 0) + 1;
+                        const cid = 'FXC-' + String(window._fxSeq).padStart(3, '0');
+                        out += `[FX COMMENT ${cid}] ${commentText.replace(/\n/g, ' / ').trim()}\n`;
+                    }
+                }
+            }
+            return out;
+        }
+        // Comments only (no body text) — used for skipped draft toggles so no FX note is lost.
+        function fxCommentsOnly(blocks) {
+            let out = '';
+            for (const b of blocks) {
+                out += fxCommentLinesFor(b);
+                if (b._children) out += fxCommentsOnly(b._children);
+            }
+            return out;
+        }
+
         // Rich version — preserves headings, code blocks, tables, bullets, toggle children
         function blocksToRichText(blocks) {
             let text = '';
@@ -431,7 +481,15 @@
                 else if (type === 'divider') text += '---\n\n';
                 else if (type === 'toggle') {
                     text += `${rt(c.rich_text)}\n`;
-                    if (b._children) text += blocksToRichText(b._children) + '\n';
+                    if (b._children) {
+                        // Old drafts / Syntax / Production Copy bodies are skipped
+                        // (per-page set computed before parsing) — comments still collected.
+                        if (window._skipBodyIds && window._skipBodyIds.has(b.id)) {
+                            text += fxCommentsOnly(b._children);
+                        } else {
+                            text += blocksToRichText(b._children) + '\n';
+                        }
+                    }
                 }
                 else if (type === 'table_row') {
                     const cells = (c.cells || []).map(cell => cell.map(t => t.plain_text).join('')).join(' | ');
@@ -439,20 +497,8 @@
                 }
                 else if (c?.rich_text) text += rt(c.rich_text) + '\n';
 
-                // Append inline comments — only [Image] and [Animation] tags
-                if (b._comments && b._comments.length > 0) {
-                    for (const comment of b._comments) {
-                        const commentText = (comment.rich_text || []).map(t => t.plain_text).join('');
-                        // Extract [Image...], [Animated Image...], and [Animation...] sections (supports tags like [Image - must-have])
-                        const fxMatches = commentText.match(/\[(Animated Image|Image|Animation)[^\]]*\][^\[]+/gi);
-                        if (fxMatches) {
-                            for (const match of fxMatches) {
-                                const cleaned = match.replace(/\n/g, ' ').trim();
-                                text += `[FX COMMENT] ${cleaned}\n`;
-                            }
-                        }
-                    }
-                }
+                // Append this block's FX comments (stable FXC-### IDs)
+                text += fxCommentLinesFor(b);
 
                 // Recurse into any other children
                 if (b._children && type !== 'toggle') text += blocksToRichText(b._children);
@@ -461,21 +507,89 @@
         }
 
         // ── CLAUDE API ──
+        async function claudeRequest(body, signal) {
+            let delay = 3000;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'x-api-key': claudeKey,
+                        'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body),
+                    signal
+                });
+                if (res.ok) return res.json();
+                let e = {}; try { e = await res.json(); } catch(_) {}
+                const msg = e.error?.message;
+                // 429 (rate limit) and 5xx are retried with backoff BEFORE any classification —
+                // rate-limit messages often contain words like "exceed" that would otherwise
+                // be misread as an out-of-credit condition.
+                if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
+                    continue;
+                }
+                if (res.status !== 429) {
+                    const friendly = friendlyApiError(res.status, msg, 'Claude');
+                    if (friendly) throw friendly;
+                }
+                throw new Error(msg || `Claude error (${res.status})`);
+            }
+        }
+
+        // Plain-text call (used for single-prompt regeneration)
         async function callClaude(system, user, signal) {
-            const res = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'x-api-key': claudeKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }] }),
-                signal
-            });
-            if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `Claude error (${res.status})`); }
-            const d = await res.json();
+            const d = await claudeRequest({ model: CLAUDE_MODEL, max_tokens: CLAUDE_MAX_TOKENS, system, messages: [{ role: 'user', content: user }] }, signal);
             return d.content[0].text;
+        }
+
+        // Structured call — Claude must return a typed asset list via tool_use.
+        // This replaces regex-parsing of markdown (which needed 3 fallback strategies
+        // and silently dropped anything it didn't recognize).
+        // SCHEMA v1 — if you change this, bump the comment and test with one real lesson.
+        const FX_ASSET_TOOL = {
+            name: 'submit_fx_assets',
+            description: 'Submit the final FX asset list for this lesson script. Every asset that needs a graphic (image or animation) must be one entry. If an FX comment references an existing library asset with "use: <asset_name>", output it as type "reuse" with that asset_name and NO prompt — it will be pulled from the shared Asset Library instead of generated.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    assets: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'string', description: 'Sequential number as string: "1", "2", ...' },
+                                type: { type: 'string', enum: ['image', 'animation', 'reuse'], description: 'image = still (Nano Banana Pro), animation = base image + Higgsfield, reuse = existing library asset referenced via use:' },
+                                context: { type: 'string', description: 'One line: scene/moment and why this asset supports the learning point' },
+                                source_comment: { type: 'string', description: 'The original FX comment text this asset came from, verbatim' },
+                                prompt: { type: 'string', description: 'The complete generation prompt following the style guide. For type animation this is the STILL BASE IMAGE prompt (scene only, no motion language). Empty string for type reuse.' },
+                                motion_prompt: { type: 'string', description: 'Only for type animation: the separate motion/video-conversion prompt for Higgsfield, following the animation rules (still-frame language, primary source of motion named, no camera words). The user generates the base image first, then pastes this with it into Higgsfield.' },
+                                asset_name: { type: 'string', description: 'Only for type reuse: the library asset name after "use:"' },
+                                scene_group: { type: 'string', description: 'Optional snake_case label shared by consecutive assets needing visual consistency (same character/location). Omit for standalone assets.' }
+                            },
+                            required: ['id', 'type', 'context', 'prompt']
+                        }
+                    }
+                },
+                required: ['assets']
+            }
+        };
+
+        async function callClaudeStructured(system, user, signal) {
+            const d = await claudeRequest({
+                model: CLAUDE_MODEL, max_tokens: CLAUDE_MAX_TOKENS, system,
+                messages: [{ role: 'user', content: user }],
+                tools: [FX_ASSET_TOOL],
+                tool_choice: { type: 'tool', name: 'submit_fx_assets' }
+            }, signal);
+            const toolBlock = (d.content || []).find(b => b.type === 'tool_use');
+            return {
+                assets: toolBlock?.input?.assets || [],
+                truncated: d.stop_reason === 'max_tokens'
+            };
         }
 
         // ── SCENE GROUP DETECTION (client-side, no extra API call) ──
@@ -612,6 +726,29 @@
             return prompts;
         }
 
+        // ── PROMPT DISPLAY SPLIT ──
+        // Every prompt ends with the same fixed style phrases from the Notion guide.
+        // On screen we show only the unique subject; the suffix folds behind a chip.
+        // Copy / Generate ALWAYS use the full prompt — this split is display-only.
+        const SUFFIX_ANCHORS = [
+            'front-facing view facing directly',
+            'isolated on simple solid white background',
+            'absolutely no outlines',
+            'stylized character with 5-head-tall',
+            'photorealistic food illustration',
+            'smooth looping animation ready',
+            '2.5D cartoon illustration style'
+        ];
+        function splitPrompt(p) {
+            let cut = -1;
+            for (const a of SUFFIX_ANCHORS) {
+                const i = p.indexOf(a);
+                if (i > 30 && (cut === -1 || i < cut)) cut = i;
+            }
+            if (cut === -1) return { subject: p, suffix: '' };
+            return { subject: p.slice(0, cut).replace(/[,\s]+$/, ''), suffix: p.slice(cut) };
+        }
+
         function renderPGCards() {
             const cards = document.getElementById('pg-cards');
             const pgResultsEl = document.getElementById('pg-results');
@@ -622,7 +759,12 @@
                 pgResultsEl.classList.add('hidden'); empty.classList.remove('hidden'); return;
             }
             pgResultsEl.classList.remove('hidden'); empty.classList.add('hidden');
-            document.getElementById('pg-results-info').textContent = `${generatedPrompts.length} FX assets detected`;
+            const typeCounts = { image: 0, animation: 0, reuse: 0, other: 0 };
+            generatedPrompts.forEach(p => { typeCounts[p.type] !== undefined ? typeCounts[p.type]++ : typeCounts.other++; });
+            document.getElementById('pg-results-info').textContent =
+                `${generatedPrompts.length} FX assets — 🖼 ${typeCounts.image} to generate · 🎬 ${typeCounts.animation} animation` +
+                (typeCounts.reuse ? ` · ♻️ ${typeCounts.reuse} reuse` : '') +
+                (typeCounts.other ? ` · ❓ ${typeCounts.other} check` : '');
 
             generatedPrompts.forEach((item, idx) => {
                 const card = document.createElement('div');
@@ -647,8 +789,8 @@
                 topRow.className = 'flex items-center gap-2 mb-1';
 
                 const badge = document.createElement('span');
-                badge.className = `text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'image' ? 'bg-amber-900/40 text-amber-400' : 'bg-blue-900/40 text-blue-400'}`;
-                badge.textContent = item.type === 'image' ? '🖼 Image' : '🎬 Animation';
+                badge.className = `text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'image' ? 'bg-amber-900/40 text-amber-400' : item.type === 'reuse' ? 'bg-green-900/40 text-green-400' : 'bg-blue-900/40 text-blue-400'}`;
+                badge.textContent = item.type === 'image' ? '🖼 Image' : item.type === 'reuse' ? '♻️ Library' : '🎬 Animation';
 
                 const num = document.createElement('span');
                 num.className = 'text-xs text-gray-600';
@@ -684,19 +826,149 @@
                 }
                 header.append(cb, meta);
 
-                const ta = document.createElement('textarea');
-                ta.value = item.prompt;
-                ta.rows = 4;
-                ta.className = 'w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-gray-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none resize-none transition';
-                ta.oninput = () => { generatedPrompts[idx].prompt = ta.value; };
+                // Unknown item type — render visibly instead of dropping silently
+                if (!['image', 'animation', 'reuse'].includes(item.type)) {
+                    cb.checked = false; cb.disabled = true;
+                    badge.className = 'text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-gray-700 text-gray-300';
+                    badge.textContent = '❓ ' + (item.type || 'unknown');
+                    const raw = document.createElement('pre');
+                    raw.className = 'w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-gray-400 whitespace-pre-wrap';
+                    raw.textContent = item.prompt || item.context || '(no content)';
+                    const note = document.createElement('p');
+                    note.className = 'text-[11px] text-yellow-600 mt-2';
+                    note.textContent = 'This item type is not supported by this version of the tool. It was kept visible so nothing is silently lost.';
+                    card.append(header, raw, note);
+                    cards.appendChild(card);
+                    return;
+                }
+
+                // ♻️ Library reuse card — no prompt, no generation; just the asset name to grab
+                if (item.type === 'reuse') {
+                    cb.checked = false; cb.disabled = true;
+                    const box = document.createElement('div');
+                    box.className = 'w-full bg-green-950/40 border border-green-800/40 rounded-xl px-3 py-3 flex items-center justify-between gap-2';
+                    const nameEl = document.createElement('code');
+                    nameEl.className = 'text-sm text-green-300 font-mono truncate';
+                    nameEl.textContent = item.assetName || '(asset name missing)';
+                    const copyNameBtn = document.createElement('button');
+                    copyNameBtn.className = 'text-xs bg-green-800 hover:bg-green-700 text-green-100 px-3 py-1.5 rounded-lg transition flex-shrink-0';
+                    copyNameBtn.textContent = 'Copy name';
+                    copyNameBtn.onclick = () => { navigator.clipboard.writeText(item.assetName || ''); showToast('Asset name copied!'); };
+                    box.append(nameEl, copyNameBtn);
+                    const note = document.createElement('p');
+                    note.className = 'text-[11px] text-gray-500 mt-2';
+                    // "use:" in the source comment = a real Asset Library reference.
+                    // Otherwise it's an in-lesson duplicate (same image reused within this script).
+                    const isLibraryRef = /use\s*:/i.test(item.source || '');
+                    note.textContent = isLibraryRef
+                        ? 'Already in the Asset Library — no generation needed. Pull it from Dropbox: Common Assets → Asset_Library (search this name in index.html).'
+                        : 'Duplicate within this lesson — generate it once (see the item number referenced above) and reuse the same image here.';
+                    card.append(header, box, note);
+                    cards.appendChild(card);
+                    return;
+                }
+
+                // Prompt body: bright unique subject + folded style suffix (display-only split).
+                // Click the subject (or after Regenerate) to edit the FULL prompt in a textarea.
+                // Animations with a separate motion prompt render as two labeled steps:
+                // ① base image (still) → ② motion prompt for Higgsfield.
+                const body = document.createElement('div');
+                const isTwoStep = item.type === 'animation' && item.motionPrompt;
+                if (isTwoStep) {
+                    const l1 = document.createElement('p');
+                    l1.className = 'text-[10px] font-bold uppercase tracking-widest text-amber-500/80 mb-1';
+                    l1.textContent = '① Base image (still)';
+                    body.append(l1);
+                }
+                if (item._edit) {
+                    const ta = document.createElement('textarea');
+                    ta.value = item.prompt;
+                    ta.rows = 6;
+                    ta.className = 'w-full bg-gray-900/80 border border-purple-700/50 rounded-xl px-3 py-2.5 text-xs text-gray-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none resize-none transition';
+                    ta.oninput = () => { generatedPrompts[idx].prompt = ta.value; };
+                    const doneBtn = document.createElement('button');
+                    doneBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1 rounded-lg mt-1';
+                    doneBtn.textContent = '✓ Done editing';
+                    doneBtn.onclick = () => { item._edit = false; renderPGCards(); };
+                    body.append(ta, doneBtn);
+                } else {
+                    const parts = splitPrompt(item.prompt);
+                    const subj = document.createElement('div');
+                    subj.className = 'w-full bg-gray-900/80 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-100 leading-relaxed cursor-text hover:border-gray-600 transition';
+                    subj.textContent = parts.subject;
+                    subj.title = 'Click to edit the full prompt';
+                    subj.onclick = () => { item._edit = true; renderPGCards(); };
+                    body.append(subj);
+                    if (parts.suffix) {
+                        const chip = document.createElement('button');
+                        chip.className = 'text-[10px] text-gray-500 bg-gray-800/80 border border-gray-700 px-2 py-1 rounded-full mt-2 hover:text-gray-400 transition';
+                        chip.textContent = `${item._showSuffix ? '▾' : '▸'} style suffix applied ✓`;
+                        chip.onclick = () => { item._showSuffix = !item._showSuffix; renderPGCards(); };
+                        body.append(chip);
+                        if (item._showSuffix) {
+                            const suf = document.createElement('p');
+                            suf.className = 'text-[10px] text-gray-600 font-mono mt-1 leading-relaxed';
+                            suf.textContent = parts.suffix;
+                            body.append(suf);
+                        }
+                    }
+                }
+
+                // ② Motion prompt block (two-step animations only)
+                if (isTwoStep) {
+                    const l2 = document.createElement('p');
+                    l2.className = 'text-[10px] font-bold uppercase tracking-widest text-blue-400/80 mt-3 mb-1';
+                    l2.textContent = '② Motion — paste into Higgsfield with the base image';
+                    body.append(l2);
+                    if (item._editM) {
+                        const mta = document.createElement('textarea');
+                        mta.value = item.motionPrompt;
+                        mta.rows = 5;
+                        mta.className = 'w-full bg-gray-900/80 border border-blue-700/50 rounded-xl px-3 py-2.5 text-xs text-gray-200 font-mono focus:ring-2 focus:ring-blue-500 outline-none resize-none transition';
+                        mta.oninput = () => { generatedPrompts[idx].motionPrompt = mta.value; };
+                        const mDone = document.createElement('button');
+                        mDone.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1 rounded-lg mt-1';
+                        mDone.textContent = '✓ Done editing';
+                        mDone.onclick = () => { item._editM = false; renderPGCards(); };
+                        body.append(mta, mDone);
+                    } else {
+                        const mp = splitPrompt(item.motionPrompt);
+                        const mbox = document.createElement('div');
+                        mbox.className = 'w-full bg-gray-900/60 border border-blue-900/40 rounded-xl px-3 py-2.5 text-sm text-gray-300 leading-relaxed cursor-text hover:border-blue-800/60 transition';
+                        mbox.textContent = mp.subject;
+                        mbox.title = 'Click to edit the motion prompt';
+                        mbox.onclick = () => { item._editM = true; renderPGCards(); };
+                        body.append(mbox);
+                        if (mp.suffix) {
+                            const mchip = document.createElement('button');
+                            mchip.className = 'text-[10px] text-gray-500 bg-gray-800/80 border border-gray-700 px-2 py-1 rounded-full mt-2 hover:text-gray-400 transition';
+                            mchip.textContent = `${item._showSuffixM ? '▾' : '▸'} style suffix applied ✓`;
+                            mchip.onclick = () => { item._showSuffixM = !item._showSuffixM; renderPGCards(); };
+                            body.append(mchip);
+                            if (item._showSuffixM) {
+                                const msuf = document.createElement('p');
+                                msuf.className = 'text-[10px] text-gray-600 font-mono mt-1 leading-relaxed';
+                                msuf.textContent = mp.suffix;
+                                body.append(msuf);
+                            }
+                        }
+                    }
+                }
 
                 const actions = document.createElement('div');
                 actions.className = 'flex gap-2 mt-3 flex-wrap';
 
                 const copyBtn = document.createElement('button');
                 copyBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg transition';
-                copyBtn.textContent = 'Copy';
-                copyBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Copied!'); };
+                copyBtn.textContent = isTwoStep ? 'Copy base prompt' : 'Copy';
+                copyBtn.onclick = () => { navigator.clipboard.writeText(generatedPrompts[idx].prompt); showToast('Copied full prompt!'); };
+
+                const copyMotionBtn = document.createElement('button');
+                if (isTwoStep) {
+                    copyMotionBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
+                    copyMotionBtn.textContent = 'Copy motion prompt';
+                    copyMotionBtn.onclick = () => { navigator.clipboard.writeText(generatedPrompts[idx].motionPrompt); showToast('Motion prompt copied!'); };
+                }
 
                 const regenBtn = document.createElement('button');
                 regenBtn.className = 'text-xs bg-purple-800 hover:bg-purple-700 text-purple-200 px-3 py-1.5 rounded-lg transition';
@@ -706,14 +978,13 @@
                     regenBtn.disabled = true;
                     try {
                         const regenSystem = systemPromptCache || '';
-                        const regenUser = `Rewrite only this single FX prompt. Keep the same subject and context, but generate a fresh version following the same style rules.\n\nOriginal context: ${item.context}\nCurrent prompt:\n${ta.value}\n\nReturn only the new prompt text, no explanation, no code block.`;
+                        const regenUser = `Rewrite only this single FX prompt. Keep the same subject and context, but generate a fresh version following the same style rules.\n\nOriginal context: ${item.context}\nCurrent prompt:\n${generatedPrompts[idx].prompt}\n\nReturn only the new prompt text, no explanation, no code block.`;
                         const newPrompt = await callClaude(regenSystem, regenUser, null);
-                        ta.value = newPrompt.trim();
                         generatedPrompts[idx].prompt = newPrompt.trim();
                         showToast('Prompt regenerated!');
+                        renderPGCards();
                     } catch(e) {
                         showToast('Regeneration failed: ' + e.message);
-                    } finally {
                         regenBtn.textContent = '↺ Regenerate';
                         regenBtn.disabled = false;
                     }
@@ -721,27 +992,22 @@
 
                 const genBtn = document.createElement('button');
                 genBtn.className = 'text-xs bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-3 py-1.5 rounded-lg transition';
-                genBtn.textContent = 'Generate with this prompt';
-                genBtn.onclick = () => runGenerationFromPrompt(ta.value);
+                genBtn.textContent = isTwoStep ? 'Generate base image' : 'Generate with this prompt';
+                genBtn.onclick = () => runGenerationFromPrompt(generatedPrompts[idx].prompt);
 
-                if (item.type === 'animation') {
-                    const copyHigsBtn = document.createElement('button');
-                    copyHigsBtn.className = 'text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition';
-                    copyHigsBtn.textContent = '📋 Copy for Higgsfield';
-                    copyHigsBtn.onclick = () => { navigator.clipboard.writeText(ta.value); showToast('Higgsfield prompt copied!'); };
-                    actions.append(copyBtn, regenBtn, genBtn, copyHigsBtn);
-                    card.append(header, ta, actions);
-                    cards.appendChild(card);
-                    return;
-                }
-
-                actions.append(copyBtn, regenBtn, genBtn);
-                card.append(header, ta, actions);
+                if (isTwoStep) actions.append(copyBtn, copyMotionBtn, regenBtn, genBtn);
+                else actions.append(copyBtn, regenBtn, genBtn);
+                card.append(header, body, actions);
                 cards.appendChild(card);
             });
         }
 
         let pgAbortController = null;
+
+        document.getElementById('refresh-rules-btn').onclick = () => {
+            systemPromptCache = null;
+            showToast('Style guide cache cleared — the latest rules will be fetched on the next run.');
+        };
 
         document.getElementById('pg-cancel-btn').onclick = () => {
             if (pgAbortController) { pgAbortController.abort(); pgAbortController = null; }
@@ -755,6 +1021,7 @@
 
             hidePGError();
             generatedPrompts = [];
+            window._fxSeq = 0;  // reset stable comment IDs (FXC-001...) per run
             renderPGCards();
 
             pgAbortController = new AbortController();
@@ -775,8 +1042,38 @@
                 ]);
 
                 if (!systemPromptCache && sgData) {
+                    window._skipBodyIds = null;   // never trim the style guide
                     systemPromptCache = blocksToRichText(sgData);
                 }
+
+                // ── DRAFT SELECTION ──
+                // Long pages carry every draft (d1..dN) + Syntax timing toggles; sending all of
+                // them blows past API rate limits and wastes tokens. Keep only the relevant
+                // draft body — priority: "with FX" > "FINAL" > highest "Script dN".
+                // Syntax / Production Copy bodies are always skipped.
+                // FX comments of skipped toggles are STILL collected (fxCommentsOnly).
+                const draftToggles = pageData.results.filter(b => b.type === 'toggle')
+                    .map(b => ({ id: b.id, title: ((b.toggle || {}).rich_text || []).map(t => t.plain_text).join('') }));
+                const skipIds = new Set();
+                const isDraftLike = T => /script|syntax|with\s*fx|final|production\s*copy|draft/i.test(T);
+                const hasWithFx = draftToggles.some(t => /with\s*fx/i.test(t.title));
+                const hasFinal = draftToggles.some(t => /final/i.test(t.title));
+                let maxD = 0;
+                draftToggles.forEach(t => {
+                    const m = t.title.match(/\bd\s*(\d+)/i);
+                    if (m && isDraftLike(t.title)) maxD = Math.max(maxD, +m[1]);
+                });
+                draftToggles.forEach(t => {
+                    const T = t.title;
+                    if (!isDraftLike(T)) return;                       // 일반 토글은 그대로
+                    if (/^\s*syntax/i.test(T)) { skipIds.add(t.id); return; }
+                    if (hasWithFx) { if (!/with\s*fx/i.test(T)) skipIds.add(t.id); return; }
+                    if (/production\s*copy/i.test(T)) { skipIds.add(t.id); return; }
+                    if (hasFinal) { if (!/final/i.test(T)) skipIds.add(t.id); return; }
+                    const m = T.match(/\bd\s*(\d+)/i);
+                    if (m && +m[1] < maxD) skipIds.add(t.id);
+                });
+                window._skipBodyIds = skipIds;
 
                 const scriptText = blocksToRichText(pageData.results);
 
@@ -784,23 +1081,46 @@
 
                 // Extract all [FX COMMENT] lines from scriptText for display
                 const fxCommentLines = scriptText.split('\n')
-                    .filter(l => l.startsWith('[FX COMMENT]'))
-                    .map(l => l.replace('[FX COMMENT]', '').trim());
+                    .filter(l => l.startsWith('[FX COMMENT'))
+                    .map(l => l.replace(/^\[FX COMMENT[^\]]*\]\s*/, '').trim());
 
 
-                // 2. Call Claude — prompt generation only (no scene_group here)
+                // 2. Call Claude — structured output (typed asset list, no markdown parsing)
                 setPGLoading('Claude is generating FX prompts...');
-                const response = await callClaude(systemPromptCache, scriptText, signal);
+                let truncated = false;
+                try {
+                    const structured = await callClaudeStructured(systemPromptCache, scriptText, signal);
+                    truncated = structured.truncated;
+                    generatedPrompts = structured.assets.map(a => ({
+                        id: a.id, type: a.type,
+                        context: a.context || '',
+                        source: a.source_comment || '',
+                        sceneGroup: a.scene_group || '',
+                        assetName: a.asset_name || '',
+                        prompt: a.prompt || '',
+                        motionPrompt: a.motion_prompt || '',
+                        selected: a.type === 'image' || a.type === 'animation'
+                    }));
+                } catch (structErr) {
+                    if (structErr.name === 'AbortError' || structErr.fatal) throw structErr;
+                    // Fallback: old text call + regex parser (kept for one release)
+                    console.warn('Structured call failed, falling back to text parsing:', structErr);
+                    showToast('⚠️ Structured call failed: ' + (structErr.message || structErr).toString().slice(0, 140) + ' — using legacy parsing.', 12000);
+                    const response = await callClaude(systemPromptCache, scriptText, signal);
+                    generatedPrompts = parseClaudeResponse(response);
+                    generatedPrompts.forEach((p, i) => { if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i]; });
+                }
 
-
-                // 3. Parse prompts
-                generatedPrompts = parseClaudeResponse(response);
                 const refIsolation = 'Use the reference images for rendering style, lighting, and color palette only — do not copy any specific character\'s face, hair, outfit, or pose from the references. Generate a completely new character based on the description above.';
                 const hasRefImages = slots[0].length > 0 || slots[1].length > 0;
-                generatedPrompts.forEach((p, i) => {
-                    if (!p.source && fxCommentLines[i]) p.source = fxCommentLines[i];
-                    if (p.type === 'image' && hasRefImages) p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
+                generatedPrompts.forEach(p => {
+                    // ref-isolation applies to anything generated with reference slots:
+                    // stills AND animation base images (motion prompts go to Higgsfield untouched)
+                    if ((p.type === 'image' || p.type === 'animation') && hasRefImages) p.prompt = p.prompt.trimEnd() + ', ' + refIsolation;
                 });
+                if (truncated) {
+                    showPGError('⚠️ The response was cut off — some assets at the end of the script may be missing. Try again, or split the lesson into two runs.');
+                }
 
                 // 4. Render cards immediately so user sees prompts fast
                 hidePGLoading();
@@ -808,8 +1128,9 @@
                 if (generatedPrompts.length === 0) {
                     showPGError('No FX comments found. Make sure the script has FX tags.');
                 } else {
-                    // 5. Detect scene groups (client-side, instant)
-                    detectSceneGroups(generatedPrompts);
+                    // 5. Scene groups: trust Claude's scene_group field when present;
+                    // run the client-side heuristic only as a fallback (legacy path).
+                    if (!generatedPrompts.some(p => p.sceneGroup)) detectSceneGroups(generatedPrompts);
                     renderPGCards(); // re-render with scene group badges
                     const groupCount = new Set(generatedPrompts.map(p => p.sceneGroup).filter(Boolean)).size;
                     if (groupCount > 0) {
@@ -840,8 +1161,10 @@
         };
 
         document.getElementById('pg-generate-selected-btn').onclick = () => {
-            const imgPrompts = generatedPrompts.filter(p => p.selected && p.type === 'image').map(p => p.prompt);
-            if (!imgPrompts.length) return showToast('No image items selected. For animations, copy and use in Higgsfield.');
+            // Batch generates stills for image items AND base images for animation items
+            // (the animation's ② motion prompt is still pasted into Higgsfield afterward).
+            const imgPrompts = generatedPrompts.filter(p => p.selected && (p.type === 'image' || p.type === 'animation')).map(p => p.prompt);
+            if (!imgPrompts.length) return showToast('No generatable items selected.');
             runGenerationFromPrompts(imgPrompts);
         };
 
@@ -868,7 +1191,7 @@
                 }
                 showToast(`${prompts.length} image(s) generated!`);
             } catch (err) {
-                if (err.name !== 'AbortError') { showToast(err.message); console.error(err); }
+                if (err.name !== 'AbortError') { showToast(err.message, err.fatal ? 12000 : 3000); console.error(err); }
                 else showToast('Generation stopped.');
             } finally {
                 isGenerating = false;
@@ -890,7 +1213,11 @@
                     try { data = text ? JSON.parse(text) : {}; } catch(e) {}
                     if (res.ok) return data;
                     const msg = data.error?.message;
-                    if (res.status === 401 || res.status === 403) throw Object.assign(new Error(`Auth error (${res.status}): Check your API key or billing settings.`), { fatal: true });
+                    // 429 retries first — quota/rate wording is ambiguous, so classify only if retries run out
+                    if (res.status !== 429) {
+                        const friendly = friendlyApiError(res.status, msg, 'Gemini');
+                        if (friendly) throw friendly;
+                    }
                     if (res.status === 429 || res.status >= 500) throw Object.assign(new Error(msg || `Server error (${res.status})`), { retryable: true });
                     throw Object.assign(new Error(msg || `Request failed (${res.status})`), { fatal: true });
                 } catch(err) {
@@ -1109,17 +1436,21 @@
         }
 
         // ── PRESET LIBRARY ──
+        // Preset snippets — wording matches the Notion style guide (source of truth) verbatim.
+        // If the guide's canonical phrases change, update these to match — do not invent variants.
         const defaultPrompts = [
-            "white background, pure character render. Remove the background leaving only the main subject, and replace the background with a solid white color",
-            "2.5D iOS emoji style",
-            "Keep the soft, semi-realistic 2.5D illustration style — smooth lighting, pastel tones, and soft shading",
-            "Do NOT use any outlines or strokes — use only color and shape to define edges",
-            "Use subtle gradients for depth, but avoid harsh shadows or high contrast",
-            "Maintain warm and natural tones with a slightly clay-like texture",
-            "Render in high quality with a flat, polished look"
+            "front-facing view facing directly toward the camera, isolated on simple solid white background, clean edges for easy background removal, full subject fully visible, no cropping",
+            "absolutely no outlines, no strokes, no borders, and no edge lines of any color, shapes are defined only by soft shading and color transitions",
+            "2.5D iOS emoji style, soft volumetric shading, soft diffused lighting",
+            "stylized character with 5-head-tall proportions, slightly compact cute figure, not chibi or overly big-headed, smooth clay-like skin texture, natural skin tone",
+            "warm natural tones with a slightly pastel color palette, slight clay or plastic sheen for depth",
+            "high quality polished render with a clean flat look",
+            "Remove the background leaving only the main subject, and replace the background with a solid white color, clean edges"
         ];
-        let savedPrompts = JSON.parse(localStorage.getItem('savedPrompts') || 'null') || defaultPrompts;
-        if (!localStorage.getItem('savedPrompts')) localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
+        // v2 storage key: existing users' localStorage held the old (pre-guide) presets —
+        // a new key makes everyone pick up the corrected defaults.
+        let savedPrompts = JSON.parse(localStorage.getItem('savedPrompts_v2') || 'null') || defaultPrompts;
+        if (!localStorage.getItem('savedPrompts_v2')) localStorage.setItem('savedPrompts_v2', JSON.stringify(savedPrompts));
 
         function getPresetCheckedState() {
             return JSON.parse(localStorage.getItem('presetCheckedState') || '{}');
@@ -1182,7 +1513,7 @@
         function removePrompt(i) {
             const removed = savedPrompts[i];
             savedPrompts.splice(i, 1);
-            localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts));
+            localStorage.setItem('savedPrompts_v2', JSON.stringify(savedPrompts));
             const state = getPresetCheckedState();
             delete state[removed];
             savePresetCheckedState(state);
@@ -1192,7 +1523,7 @@
         document.getElementById('add-prompt-btn').onclick = () => {
             const inp = document.getElementById('new-prompt-input');
             const val = inp.value.trim();
-            if (val) { savedPrompts.push(val); localStorage.setItem('savedPrompts', JSON.stringify(savedPrompts)); inp.value = ''; renderPrompts(); }
+            if (val) { savedPrompts.push(val); localStorage.setItem('savedPrompts_v2', JSON.stringify(savedPrompts)); inp.value = ''; renderPrompts(); }
         };
         document.getElementById('new-prompt-input').onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('add-prompt-btn').click(); };
 
